@@ -8,6 +8,7 @@
 <title>港巴即時｜BusPulse HK</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3fZlQw7T7yRk3jXqR5L5nH5k5u3Wk=" crossorigin="">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -91,6 +92,14 @@ body{
 .eta.sch .m{color:var(--sched); font-size:18px}
 .pulse{animation:pl 1.6s ease-in-out infinite}
 @keyframes pl{0%,100%{opacity:1}50%{opacity:.45}}
+.map-actions{padding:0 13px 12px 15px}
+.map-toggle{width:100%;border:1px solid rgba(133,169,255,.28);background:rgba(108,140,255,.1);color:#b9c9ff;border-radius:10px;padding:9px 11px;font:700 11.5px inherit;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+.map-toggle:active{transform:scale(.99);background:rgba(108,140,255,.18)}
+.map-toggle .map-arrow{font-size:15px;line-height:1;transition:transform .2s ease}.map-toggle.open .map-arrow{transform:rotate(180deg)}
+.map-wrap{display:none;margin:0 13px 12px 15px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#dbe7ef}
+.map-wrap.open{display:block}.route-map{height:250px;width:100%;z-index:1}.map-note{padding:7px 10px;background:rgba(16,24,39,.94);color:var(--faint);font-size:10px;line-height:1.4}
+.map-loading{height:250px;display:grid;place-items:center;color:#53657e;font-size:12px}
+.leaflet-container{font-family:inherit}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#17233a;color:#f4f7fb}.leaflet-popup-content{font-size:12px;line-height:1.5}.leaflet-control-zoom a{color:#23344e}
 .rmk{
   padding:0 13px 11px 15px; font-size:10.5px; color:var(--faint);
   display:flex; flex-wrap:wrap; gap:4px 8px;
@@ -193,6 +202,7 @@ input.tin::placeholder{color:#4b5566;font-weight:400;letter-spacing:0}
   .sheet{max-width:600px;margin:0 auto;border-radius:20px 20px 0 0}
 }
 </style>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
 <div class="top">
@@ -330,9 +340,9 @@ async function stopsKMB(v) {
     KMB + '/route-stop/' + encodeURIComponent(v.route) + '/' + v.bound + '/' + v.service_type
   )).data;
   const names = await cached('kmb:stops', () => getJSON(KMB + '/stop').then(d => {
-    const m = new Map(); d.data.forEach(s => m.set(s.stop, s.name_tc)); return m;
+    const m = new Map(); d.data.forEach(s => m.set(s.stop, { name: s.name_tc, lat: +s.lat, lng: +s.long })); return m;
   }));
-  return rs.map(s => ({ seq: +s.seq, id: s.stop, name: names.get(s.stop) || s.stop }));
+  return rs.map(s => { const info = names.get(s.stop) || {}; return { seq: +s.seq, id: s.stop, name: info.name || s.stop, lat: info.lat, lng: info.lng }; });
 }
 
 async function stopsCTB(v) {
@@ -340,11 +350,12 @@ async function stopsCTB(v) {
     CTB + '/route-stop/CTB/' + encodeURIComponent(v.route) + '/' + v.bound
   )).data;
   const out = await Promise.all(rs.map(async s => {
-    let nm = s.stop;
+    let nm = s.stop, lat, lng;
     try {
-      nm = (await cached('ctb:stop:' + s.stop, () => getJSON(CTB + '/stop/' + s.stop))).data.name_tc || s.stop;
+      const info = (await cached('ctb:stop:' + s.stop, () => getJSON(CTB + '/stop/' + s.stop))).data || {};
+      nm = info.name_tc || s.stop; lat = +(info.lat || info.latitude); lng = +(info.long || info.lng || info.longitude);
     } catch {}
-    return { seq: +s.seq, id: s.stop, name: nm };
+    return { seq: +s.seq, id: s.stop, name: nm, lat, lng };
   }));
   return out;
 }
@@ -352,7 +363,8 @@ async function stopsCTB(v) {
 async function stopsGMB(v) {
   const d = (await getJSON(GMB + '/route-stop/' + v.route_id + '/' + v.route_seq)).data;
   return (d.route_stops || []).map(s => ({
-    seq: +s.stop_seq, id: String(s.stop_id), name: s.name_tc
+    seq: +s.stop_seq, id: String(s.stop_id), name: s.name_tc,
+    lat: +(s.lat || s.latitude), lng: +(s.long || s.lng || s.longitude)
   }));
 }
 
@@ -451,11 +463,13 @@ const uid = it => [it.co, it.route, it.dir || it.route_seq, it.stopId || it.seq]
 const $ = s => document.querySelector(s);
 const board = $('#board'), dot = $('#dot'), clock = $('#clock');
 let lastOK = 0, inFlight = false;
+const mapCache = new Map();
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 function shell() {
+  mapCache.clear();
   if (!items.length) {
     board.innerHTML =
       '<div class="empty"><div class="big">&#128652;</div>' +
@@ -474,8 +488,44 @@ function shell() {
       '<div class="etas" data-slot="' + id + '">' +
         '<div class="eta"><div class="m pulse">··</div><div class="u">載入中</div></div>' +
       '</div>' +
+      '<div class="map-actions"><button class="map-toggle" data-map-id="' + id + '">' +
+        '<span>🗺 查看站頭與路線地圖</span><span class="map-arrow">⌄</span>' +
+      '</button></div>' +
+      '<div class="map-wrap" data-map-wrap="' + id + '"><div class="route-map"></div></div>' +
     '</div>';
   }).join('');
+}
+
+async function toggleMap(it, button) {
+  const id = uid(it);
+  const wrap = board.querySelector('[data-map-wrap="' + CSS.escape(id) + '"]');
+  if (!wrap) return;
+  const open = wrap.classList.toggle('open');
+  button.classList.toggle('open', open);
+  if (!open) { button.querySelector('span').textContent = '🗺 查看站頭與路線地圖'; return; }
+  button.querySelector('span').textContent = '🗺 收起地圖';
+  if (mapCache.has(id)) { setTimeout(() => mapCache.get(id).invalidateSize(), 80); return; }
+  const mapEl = wrap.querySelector('.route-map');
+  mapEl.innerHTML = '<div class="map-loading"><span class="spin"></span>載入站頭位置…</div>';
+  try {
+    const stops = (await routeStops(it)).filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+    if (!stops.length) throw new Error('no-coordinates');
+    mapEl.innerHTML = '';
+    const map = L.map(mapEl, { zoomControl: false, attributionControl: true });
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+    const points = stops.map(x => [x.lat, x.lng]);
+    L.polyline(points, { color: '#6c8cff', weight: 5, opacity: .72, dashArray: '8 7' }).addTo(map);
+    stops.forEach((st, i) => {
+      const here = st.id === it.stopId;
+      const marker = L.circleMarker([st.lat, st.lng], { radius: here ? 9 : 5, color: here ? '#ff625c' : '#6c8cff', weight: here ? 3 : 2, fillColor: here ? '#ffbe55' : '#a9baff', fillOpacity: .95 });
+      marker.bindPopup('<b>' + (here ? '📍 目前選擇站頭' : '第 ' + st.seq + ' 站') + '</b><br>' + esc(st.name));
+      marker.addTo(map);
+    });
+    map.fitBounds(L.latLngBounds(points), { padding: [18, 18], maxZoom: 15 });
+    const note = document.createElement('div'); note.className = 'map-note'; note.textContent = '紅色標記係你揀嘅站頭；藍色虛線按官方站序連接，實際行車道路或會不同。'; wrap.appendChild(note);
+    mapCache.set(id, map);
+  } catch { mapEl.innerHTML = '<div class="map-loading">暫時未有站頭座標資料</div>'; }
 }
 
 function paint(it, res) {
