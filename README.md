@@ -1,4 +1,4 @@
-# BusPulse HK
+# 港巴即時｜BusPulse HK
 
 A lightweight Progressive Web App for checking real-time Hong Kong bus arrival information.
 
