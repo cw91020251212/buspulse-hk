@@ -475,6 +475,9 @@ const uid = it => [it.co, it.route, it.dir || it.route_seq, it.stopId || it.seq]
    =================================================================== */
 const $ = s => document.querySelector(s);
 const board = $('#board'), dot = $('#dot'), clock = $('#clock');
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const cssEscape = s => (globalThis.CSS && typeof CSS.escape === 'function') ? CSS.escape(String(s)) : String(s).replace(/[^a-zA-Z0-9_-]/g, ch => '\\' + ch.charCodeAt(0).toString(16) + ' ');
 let lastOK = 0, inFlight = false;
 const mapCache = new Map();
 const fareMemo = new Map();
@@ -483,10 +486,12 @@ async function fareData() {
   return fareMemo.get('all');
 }
 async function updateFares() {
-  const fares = await fareData();
+  let fares = {};
+  try { fares = await fareData(); } catch { return; }
+  if (!fares || typeof fares !== 'object') return;
   const snapshot = items.slice();
   snapshot.forEach(it => {
-    const el = board.querySelector('[data-fare="' + CSS.escape(uid(it)) + '"]');
+    const el = board.querySelector('[data-fare="' + cssEscape(uid(it)) + '"]');
     if (!el) return;
     const routeSeq = it.co === 'GMB' ? (+it.route_seq || 1) : (it.dir === 'I' ? 2 : 1);
     const key = it.co + '|' + String(it.route).toUpperCase() + '|' + routeSeq;
@@ -523,7 +528,7 @@ function shell() {
     const item = items.find(x => uid(x) === button.dataset.mapId);
     if (item) button.addEventListener('click', () => toggleMap(item, button));
   });
-  updateFares();
+  updateFares().catch(() => {});
   board.querySelectorAll('[data-locate-id]').forEach(button => {
     const item = items.find(x => uid(x) === button.dataset.locateId);
     if (item) button.addEventListener('click', () => locateOnExistingMap(item));
@@ -544,7 +549,7 @@ async function roadPath(stops) {
 
 async function toggleMap(it, button) {
   const id = uid(it);
-  const wrap = board.querySelector('[data-map-wrap="' + CSS.escape(id) + '"]');
+  const wrap = board.querySelector('[data-map-wrap="' + cssEscape(id) + '"]');
   if (!wrap) return;
   const open = wrap.classList.toggle('open');
   button.classList.toggle('open', open);
@@ -631,11 +636,11 @@ function locateOnMap(map, stops, button) {
 function locateOnExistingMap(it) {
   const map = mapCache.get(uid(it));
   if (!map) return;
-  routeStops(it).then(stops => locateOnMap(map, stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng)), board.querySelector('[data-locate-id="' + CSS.escape(uid(it)) + '"]')));
+  routeStops(it).then(stops => locateOnMap(map, stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng)), board.querySelector('[data-locate-id="' + cssEscape(uid(it)) + '"]')));
 }
 
 function paint(it, res) {
-  const slot = board.querySelector('[data-slot="' + CSS.escape(uid(it)) + '"]');
+  const slot = board.querySelector('[data-slot="' + cssEscape(uid(it)) + '"]');
   if (!slot) return;
   const card = slot.closest('.card');
   const old = card.querySelector('.rmk, .none');
