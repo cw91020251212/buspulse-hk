@@ -93,7 +93,7 @@ body{
 .pulse{animation:pl 1.6s ease-in-out infinite}
 @keyframes pl{0%,100%{opacity:1}50%{opacity:.45}}
 .map-actions{padding:0 13px 12px 15px}
-.map-toggle{width:100%;border:1px solid rgba(133,169,255,.28);background:rgba(108,140,255,.1);color:#b9c9ff;border-radius:10px;padding:9px 11px;font:700 11.5px inherit;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+.map-toggle{width:100%;border:1px solid rgba(133,169,255,.28);background:rgba(108,140,255,.1);color:#b9c9ff;border-radius:10px;padding:9px 11px;font:700 11.5px inherit;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between}.map-head-btn{width:28px;height:28px;border:1px solid rgba(133,169,255,.28);background:rgba(108,140,255,.1);color:#b9c9ff;border-radius:8px;font:700 14px inherit;cursor:pointer;flex:none}.map-head-btn:active{transform:scale(.94)}
 .map-toggle:active{transform:scale(.99);background:rgba(108,140,255,.18)}
 .map-toggle .map-arrow{font-size:15px;line-height:1;transition:transform .2s ease}.map-toggle.open .map-arrow{transform:rotate(180deg)}
 .map-wrap{display:none;margin:0 13px 12px 15px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#dbe7ef}
@@ -496,14 +496,12 @@ function shell() {
         '<span class="rt">' + esc(it.route) + '</span>' +
         '<span class="co ' + it.co + '">' + CO_NAME[it.co] + '</span>' +
         '<span class="dest">往 ' + esc(it.dest || '') + '</span>' +
+      '<button class="map-head-btn" data-map-id="' + id + '" title="查看路線地圖" aria-label="查看路線地圖">⌖</button>' +
       '</div>' +
       '<div class="stop">&#128205; <b>' + esc(it.stopName || '') + '</b></div>' +
       '<div class="etas" data-slot="' + id + '">' +
         '<div class="eta"><div class="m pulse">··</div><div class="u">載入中</div></div>' +
       '</div>' +
-      '<div class="map-actions"><button class="map-toggle" data-map-id="' + id + '">' +
-        '<span>🗺 查看站頭與路線地圖</span><span class="map-arrow">⌄</span>' +
-      '</button></div>' +
       '<div class="map-wrap" data-map-wrap="' + id + '"><div class="map-tools"><button class="locate-btn" data-locate-id="' + id + '">⌖ 定位我附近</button></div><div class="route-map"></div></div>' +
     '</div>';
   }).join('');
@@ -515,6 +513,18 @@ function shell() {
     const item = items.find(x => uid(x) === button.dataset.locateId);
     if (item) button.addEventListener('click', () => locateOnExistingMap(item));
   });
+}
+
+async function roadPath(stops) {
+  const valid = stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+  if (valid.length < 2) return valid.map(x => [x.lat, x.lng]);
+  try {
+    const coords = valid.map(x => x.lng + ',' + x.lat).join(';');
+    const d = await getJSON('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson&steps=false', 15000);
+    const line = d.routes?.[0]?.geometry?.coordinates || [];
+    if (line.length > 1) return line.map(x => [x[1], x[0]]);
+  } catch {}
+  return valid.map(x => [x.lat, x.lng]);
 }
 
 async function toggleMap(it, button) {
@@ -536,7 +546,8 @@ async function toggleMap(it, button) {
     L.control.zoom({ position: 'topright' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
     const points = stops.map(x => [x.lat, x.lng]);
-    L.polyline(points, { color: '#6c8cff', weight: 5, opacity: .72, dashArray: '8 7' }).addTo(map);
+    const road = await roadPath(stops);
+    L.polyline(road, { color: '#6c8cff', weight: 5, opacity: .82 }).addTo(map);
     stops.forEach((st, i) => {
       const here = st.id === it.stopId;
       const marker = L.circleMarker([st.lat, st.lng], { radius: here ? 9 : 5, color: here ? '#ff625c' : '#6c8cff', weight: here ? 3 : 2, fillColor: here ? '#ffbe55' : '#a9baff', fillOpacity: .95 });
@@ -544,7 +555,7 @@ async function toggleMap(it, button) {
       marker.addTo(map);
     });
     map.fitBounds(L.latLngBounds(points), { padding: [18, 18], maxZoom: 15 });
-    const note = document.createElement('div'); note.className = 'map-note'; note.textContent = '紅色標記係你揀嘅站頭；藍色虛線按官方站序連接，實際行車道路或會不同。'; wrap.appendChild(note);
+    const note = document.createElement('div'); note.className = 'map-note'; note.textContent = '紅色標記係你揀嘅站頭；藍線按道路網絡模擬，實際巴士行車路線或會因交通安排不同。'; wrap.appendChild(note);
     mapCache.set(id, map);
   } catch { mapEl.innerHTML = '<div class="map-loading">暫時未有站頭座標資料</div>'; }
 }
@@ -566,7 +577,8 @@ async function showSetupMap(v, stops, button) {
   L.control.zoom({ position: 'topright' }).addTo(map);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
   const points = valid.map(x => [x.lat, x.lng]);
-  L.polyline(points, { color: '#6c8cff', weight: 5, opacity: .72, dashArray: '8 7' }).addTo(map);
+  const road = await roadPath(valid);
+  L.polyline(road, { color: '#6c8cff', weight: 5, opacity: .82 }).addTo(map);
   valid.forEach(st => {
     const marker = L.circleMarker([st.lat, st.lng], { radius: 6, color: '#6c8cff', weight: 2, fillColor: '#a9baff', fillOpacity: .95 });
     marker.bindPopup('<b>第 ' + st.seq + ' 站</b><br>' + esc(st.name) + '<br><button class="popup-select" data-stop-id="' + esc(st.id) + '">用呢個站</button>');
@@ -815,7 +827,7 @@ async function viewStops(v) {
   sBody.innerHTML =
     '<div class="lbl">' + esc(v.dirLabel) + '</div>' +
     '<div class="map-actions" style="padding:0 0 10px"><button class="map-toggle" id="setupMapBtn"><span>🗺 先睇全條路線地圖</span><span class="map-arrow">⌄</span></button></div>' +
-    '<div class="map-wrap" id="setupMapWrap"><div class="map-tools"><button class="locate-btn" id="locateBtn">⌖ 定位我附近</button></div><div class="route-map"></div><div class="map-note">藍色虛線按官方站序連接，撳任何站點可以睇站名。</div></div>' +
+    '<div class="map-wrap" id="setupMapWrap"><div class="map-tools"><button class="locate-btn" id="locateBtn">⌖ 定位我附近</button></div><div class="route-map"></div><div class="map-note">藍線按道路網絡模擬，撳任何站點可以睇站名。</div></div>' +
     '<div class="hint" style="margin:0 0 10px">睇完地圖後，揀你上車嗰個站（' + stops.length + ' 個）</div>' +
     '<div class="list">' + stops.map((s, i) =>
       '<button class="li sm" data-s="' + i + '">' +
