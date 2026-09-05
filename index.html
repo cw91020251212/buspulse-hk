@@ -478,36 +478,22 @@ const board = $('#board'), dot = $('#dot'), clock = $('#clock');
 let lastOK = 0, inFlight = false;
 const mapCache = new Map();
 const fareMemo = new Map();
-const FARE_URL = { KMB: 'https://static.data.gov.hk/td/routes-fares-geojson/JSON_BUS.json', CTB: 'https://static.data.gov.hk/td/routes-fares-geojson/JSON_BUS.json', GMB: 'https://static.data.gov.hk/td/routes-fares-geojson/JSON_GMB.json' };
-async function fareData(co) {
-  if (!fareMemo.has(co)) fareMemo.set(co, getJSON(FARE_URL[co], 30000).then(d => d.features || []).catch(() => []));
-  return fareMemo.get(co);
+async function fareData() {
+  if (!fareMemo.has('all')) fareMemo.set('all', getJSON('./fare-index.json', 12000).catch(() => ({})));
+  return fareMemo.get('all');
 }
 async function updateFares() {
+  const fares = await fareData();
   const snapshot = items.slice();
-  const groups = await Promise.all([...new Set(snapshot.map(x => x.co))].map(async co => [co, await fareData(co)]));
-  const all = new Map(groups);
   snapshot.forEach(it => {
     const el = board.querySelector('[data-fare="' + CSS.escape(uid(it)) + '"]');
     if (!el) return;
     const routeSeq = it.co === 'GMB' ? (+it.route_seq || 1) : (it.dir === 'I' ? 2 : 1);
-    const route = String(it.route).toUpperCase();
-    const features = all.get(it.co) || [];
-    const match = features.find(f => {
-      const p = f.properties || {};
-      return String(p.companyCode || '').toUpperCase().includes(it.co) && String(p.routeNameC || '').toUpperCase() === route && (+p.routeSeq || 1) === routeSeq && Number(p.stopSeq) === Number(it.seq);
-    }) || features.find(f => {
-      const p = f.properties || {};
-      return String(p.companyCode || '').toUpperCase().includes(it.co) && String(p.routeNameC || '').toUpperCase() === route && (+p.routeSeq || 1) === routeSeq;
-    });
-    const fare = match && match.properties && Number(match.properties.fullFare);
+    const key = it.co + '|' + String(it.route).toUpperCase() + '|' + routeSeq;
+    const fare = Number(fares[key]);
     el.textContent = Number.isFinite(fare) ? '車資 $' + fare.toFixed(1) : '車資 —';
   });
 }
-
-
-const esc = s => String(s == null ? '' : s)
-  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 function shell() {
   mapCache.clear();
