@@ -579,10 +579,26 @@ function ringBell() {
   if (navigator.vibrate) navigator.vibrate([260,100,260,100,260,220,260,100,260,100,260,220,260]);
 }
 function notifyArrival(it, min) {
+  const body = it.route + ' 往 ' + (it.dest || '') + '，約 ' + (Math.max(0,min)) + ' 分鐘到 ' + (it.stopName || '');
   ringBell();
   const card = board.querySelector('[data-id="' + cssEscape(uid(it)) + '"]');
   if (card) { card.classList.remove('alert-flash'); void card.offsetWidth; card.classList.add('alert-flash'); setTimeout(() => card.classList.remove('alert-flash'), 12000); }
-  if ('Notification' in window && Notification.permission === 'granted') new Notification('巴士就嚟到站', { body: it.route + ' 往 ' + (it.dest || '') + '，約 ' + (Math.max(0,min)) + ' 分鐘到 ' + (it.stopName || '') });
+  if ('Notification' in window && Notification.permission === 'granted') {
+    navigator.serviceWorker?.ready.then(reg => {
+      reg.showNotification('巴士就嚟到站', {
+        body,
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'buspulse-' + uid(it),
+        renotify: true,
+        vibrate: [260,100,260,100,260],
+        requireInteraction: true,
+        data: { url: './' }
+      });
+    }).catch(() => {
+      try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) }); } catch {}
+    });
+  }
 }
 function checkAlarms(it, res) {
   if (!alarms[uid(it)] || !res || res.err || !res.etas?.length) return;
@@ -619,7 +635,13 @@ async function openMiniWindow(button) {
   } catch { button.textContent = '小窗未能開啟，請用分割畫面'; }
 }
 
-async function requestNotifications() { if ('Notification' in window && Notification.permission === 'default') try { await Notification.requestPermission(); } catch {} }
+async function requestNotifications() {
+  if (!('Notification' in window)) return;
+  try {
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    if (Notification.permission === 'granted') await navigator.serviceWorker?.ready;
+  } catch {}
+}
 
 async function roadPath(stops) {
   const valid = stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
@@ -793,7 +815,8 @@ function startLoop() {
 function stopLoop() { if (timer) { clearInterval(timer); timer = null; } }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopLoop(); else startLoop();
+  // 不要因為切去音樂／聊天 App 就停止提醒；回到前景時立即補一次更新。
+  if (!document.hidden) refresh();
 });
 $('#refreshBtn').addEventListener('click', () => { refresh(); });
 /* ===================================================================
