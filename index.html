@@ -532,6 +532,34 @@ async function toggleMap(it, button) {
   } catch { mapEl.innerHTML = '<div class="map-loading">暫時未有站頭座標資料</div>'; }
 }
 
+async function showSetupMap(v, stops, button) {
+  const wrap = $('#setupMapWrap');
+  if (!wrap) return;
+  const open = wrap.classList.toggle('open');
+  button.classList.toggle('open', open);
+  if (!open) { button.querySelector('span').textContent = '🗺 先睇全條路線地圖'; return; }
+  button.querySelector('span').textContent = '🗺 收起路線地圖';
+  const mapEl = wrap.querySelector('.route-map');
+  if (mapEl.dataset.ready === '1') { setTimeout(() => setupMapInstance && setupMapInstance.invalidateSize(), 80); return; }
+  const valid = stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+  if (!valid.length) { mapEl.innerHTML = '<div class="map-loading">呢條路線暫時未有站頭座標資料</div>'; return; }
+  mapEl.innerHTML = '';
+  const map = L.map(mapEl, { zoomControl: false, attributionControl: true });
+  setupMapInstance = map;
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+  const points = valid.map(x => [x.lat, x.lng]);
+  L.polyline(points, { color: '#6c8cff', weight: 5, opacity: .72, dashArray: '8 7' }).addTo(map);
+  valid.forEach(st => {
+    const marker = L.circleMarker([st.lat, st.lng], { radius: 6, color: '#6c8cff', weight: 2, fillColor: '#a9baff', fillOpacity: .95 });
+    marker.bindPopup('<b>第 ' + st.seq + ' 站</b><br>' + esc(st.name));
+    marker.addTo(map);
+  });
+  map.fitBounds(L.latLngBounds(points), { padding: [18, 18], maxZoom: 15 });
+  mapEl.dataset.ready = '1';
+}
+let setupMapInstance = null;
+
 function paint(it, res) {
   const slot = board.querySelector('[data-slot="' + CSS.escape(uid(it)) + '"]');
   if (!slot) return;
@@ -734,9 +762,12 @@ async function viewStops(v) {
     $('#bk').addEventListener('click', viewSearch);
     return;
   }
+  setupMapInstance = null;
   sBody.innerHTML =
     '<div class="lbl">' + esc(v.dirLabel) + '</div>' +
-    '<div class="hint" style="margin:0 0 10px">揀你上車嗰個站（' + stops.length + ' 個）</div>' +
+    '<div class="map-actions" style="padding:0 0 10px"><button class="map-toggle" id="setupMapBtn"><span>🗺 先睇全條路線地圖</span><span class="map-arrow">⌄</span></button></div>' +
+    '<div class="map-wrap" id="setupMapWrap"><div class="route-map"></div><div class="map-note">藍色虛線按官方站序連接，撳任何站點可以睇站名。</div></div>' +
+    '<div class="hint" style="margin:0 0 10px">睇完地圖後，揀你上車嗰個站（' + stops.length + ' 個）</div>' +
     '<div class="list">' + stops.map((s, i) =>
       '<button class="li sm" data-s="' + i + '">' +
         '<span class="n">' + s.seq + '</span>' +
@@ -744,6 +775,7 @@ async function viewStops(v) {
         '<span class="a">＋</span>' +
       '</button>').join('') + '</div>' +
     '<button class="wide" id="bk">← 返回</button>';
+  $('#setupMapBtn').addEventListener('click', () => showSetupMap(v, stops, $('#setupMapBtn')));
   $('#bk').addEventListener('click', viewSearch);
   sBody.querySelectorAll('[data-s]').forEach(b =>
     b.addEventListener('click', () => addItem(v, stops[+b.dataset.s])));
