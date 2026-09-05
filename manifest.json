@@ -1,0 +1,17 @@
+{
+  "name": "BusPulse HK — 香港巴士到站牌",
+  "short_name": "BusPulse HK",
+  "description": "香港巴士實時到站牌 — 一開即睇，唔使揿",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101827",
+  "theme_color": "#101827",
+  "lang": "zh-HK",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

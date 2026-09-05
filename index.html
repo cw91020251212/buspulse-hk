@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<meta name="description" content="BusPulse HK — 香港巴士實時到站牌">
+<title>BusPulse HK｜巴士到站牌</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#101827; --bg-deep:#0b1120; --card:rgba(26,36,55,.88); --card2:#22304a; --line:rgba(151,173,207,.16);
+  --tx:#f4f7fb; --dim:#aab7cc; --faint:#71809a;
+  --now:#36e0a0; --soon:#ffd166; --late:#85a9ff; --sched:#9aa8bd;
+  --kmb:#ff625c; --ctb:#ffbe55; --gmb:#63d889;
+  --accent:#6c8cff; --accent-2:#a77bff; --glow:rgba(108,140,255,.22);
+  --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:radial-gradient(circle at 12% -8%, rgba(108,140,255,.22), transparent 34%), radial-gradient(circle at 100% 10%, rgba(167,123,255,.16), transparent 30%), var(--bg); color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"Noto Sans HK","PingFang HK","Microsoft JhengHei",system-ui,sans-serif;
+  min-height:100vh; padding-bottom:calc(84px + var(--safe-b));
+  -webkit-tap-highlight-color:transparent;
+}
+/* ---------- top bar ---------- */
+.top{
+  position:sticky; top:0; z-index:50; background:rgba(16,24,39,.84);
+  backdrop-filter:blur(12px); border-bottom:1px solid var(--line);
+  padding:calc(10px + var(--safe-t)) 14px 10px;
+  display:flex; align-items:center; gap:10px;
+}
+.top h1{font-size:17px; font-weight:800; letter-spacing:.3px; flex:1; background:linear-gradient(100deg,#fff 20%,#a9baff); -webkit-background-clip:text; background-clip:text; color:transparent}
+.brandmark{width:31px;height:31px;border-radius:10px;display:grid;place-items:center;flex:none;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-size:10px;font-weight:900;letter-spacing:-.4px;box-shadow:0 5px 16px var(--glow)}
+.brandcopy{flex:1;min-width:0}.brandcopy h1{line-height:1.1}.brandcopy small{display:block;color:var(--faint);font-size:9px;font-weight:700;letter-spacing:.45px;margin-top:3px}
+.clock{font-variant-numeric:tabular-nums; font-size:13px; color:var(--dim); font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--now);flex:none}
+.dot.stale{background:var(--soon)}
+.dot.err{background:var(--kmb)}
+.iconbtn{
+  background:rgba(34,48,74,.82); border:1px solid var(--line); color:var(--tx);
+  width:34px;height:34px;border-radius:10px; font-size:15px; cursor:pointer;
+  display:grid;place-items:center; flex:none;
+}
+.iconbtn:active{background:#2a3240}
+/* ---------- board ---------- */
+.board{padding:12px 12px 0; display:flex; flex-direction:column; gap:10px}
+.card{
+  background:linear-gradient(135deg,rgba(29,41,63,.94),rgba(20,29,46,.94)); border:1px solid var(--line); border-radius:18px; box-shadow:0 10px 28px rgba(3,8,20,.18);
+  overflow:hidden; position:relative;
+}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--dim)}
+.card[data-co=KMB]::before{background:var(--kmb)}
+.card[data-co=CTB]::before{background:var(--ctb)}
+.card[data-co=GMB]::before{background:var(--gmb)}
+.chead{display:flex; align-items:baseline; gap:8px; padding:11px 13px 8px 15px}
+.rt{font-size:25px; font-weight:800; letter-spacing:-.5px; line-height:1}
+.co{
+  font-size:9px; font-weight:800; padding:2px 5px; border-radius:4px;
+  letter-spacing:.5px; flex:none; transform:translateY(-2px);
+}
+.co.KMB{background:rgba(226,35,26,.16); color:#ff8079}
+.co.CTB{background:rgba(245,166,35,.16); color:#ffc165}
+.co.GMB{background:rgba(78,192,110,.16); color:#7fd897}
+.dest{font-size:12.5px; color:var(--dim); flex:1; min-width:0; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; text-align:right}
+.stop{
+  padding:0 13px 9px 15px; font-size:11.5px; color:var(--faint);
+  display:flex; align-items:center; gap:5px;
+}
+.stop b{color:var(--dim); font-weight:600}
+/* ---------- eta row ---------- */
+.etas{display:flex; gap:7px; padding:0 13px 12px 15px; overflow-x:auto; scrollbar-width:none}
+.etas::-webkit-scrollbar{display:none}
+.eta{
+  background:linear-gradient(145deg,rgba(39,54,82,.9),rgba(29,42,66,.9)); border:1px solid var(--line); border-radius:10px;
+  padding:7px 11px; min-width:66px; flex:none; text-align:center;
+}
+.eta .m{font-size:21px; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums}
+.eta .u{font-size:9.5px; color:var(--faint); font-weight:600}
+.eta .t{font-size:9.5px; color:var(--faint); margin-top:2px; font-variant-numeric:tabular-nums}
+.eta.i0{border-color:rgba(0,229,138,.4); background:rgba(0,229,138,.08)}
+.eta.i0 .m{color:var(--now)}
+.eta.i1 .m{color:var(--soon)}
+.eta.i2 .m{color:var(--late)}
+.eta.arr{border-color:rgba(0,229,138,.55); background:rgba(0,229,138,.14)}
+.eta.arr .m{font-size:15px; padding-top:3px}
+.eta.sch{opacity:.62}
+.eta.sch .m{color:var(--sched); font-size:18px}
+.pulse{animation:pl 1.6s ease-in-out infinite}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.45}}
+.rmk{
+  padding:0 13px 11px 15px; font-size:10.5px; color:var(--faint);
+  display:flex; flex-wrap:wrap; gap:4px 8px;
+}
+.none{padding:2px 13px 13px 15px; font-size:12px; color:var(--faint)}
+/* ---------- empty / footer ---------- */
+.empty{padding:64px 26px; text-align:center; color:var(--faint)}
+.empty .big{font-size:40px; margin-bottom:12px; opacity:.5}
+.empty p{font-size:13.5px; line-height:1.75}
+.foot{padding:20px 15px calc(20px + var(--safe-b)); text-align:center;
+  font-size:10.5px; color:#3f4757; line-height:1.7}
+/* ---------- fab ---------- */
+.fab{
+  position:fixed; right:16px; bottom:calc(18px + var(--safe-b)); z-index:60;
+  background:linear-gradient(135deg,var(--now),#8af0c5); color:#071a14; border:none; border-radius:15px;
+  height:50px; padding:0 20px; font-size:14.5px; font-weight:800; cursor:pointer;
+  box-shadow:0 7px 24px rgba(0,229,138,.32); font-family:inherit;
+}
+.fab:active{transform:scale(.96)}
+/* ---------- sheet ---------- */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:99;
+  opacity:0;pointer-events:none;transition:opacity .22s}
+.mask.on{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed; left:0;right:0;bottom:0; z-index:100;
+  background:linear-gradient(180deg,#17233a,var(--bg)); border-top:1px solid var(--line);
+  border-radius:20px 20px 0 0; max-height:90vh; display:flex; flex-direction:column;
+  transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
+}
+.sheet.on{transform:translateY(0)}
+.grab{width:38px;height:4px;background:#39414f;border-radius:2px;margin:9px auto 3px;flex:none}
+.shead{padding:8px 15px 12px; display:flex; align-items:center; gap:10px;
+  border-bottom:1px solid var(--line); flex:none}
+.shead h2{font-size:15.5px; font-weight:700; flex:1}
+.sbody{overflow-y:auto; padding:13px 15px calc(24px + var(--safe-b)); -webkit-overflow-scrolling:touch}
+.lbl{font-size:10.5px; color:var(--faint); font-weight:700; letter-spacing:.7px;
+  text-transform:uppercase; margin:16px 0 7px}
+.lbl:first-child{margin-top:2px}
+.segs{display:flex; gap:6px}
+.seg{
+  flex:1; background:var(--card); border:1px solid var(--line); color:var(--dim);
+  padding:9px 4px; border-radius:9px; font-size:12.5px; font-weight:700;
+  cursor:pointer; font-family:inherit;
+}
+.seg.on{background:linear-gradient(135deg,rgba(108,140,255,.28),rgba(167,123,255,.2)); border-color:rgba(142,163,255,.65); color:var(--tx); box-shadow:0 5px 16px var(--glow)}
+input.tin{
+  width:100%; background:var(--card); border:1px solid var(--line); color:var(--tx);
+  padding:12px 13px; border-radius:11px; font-size:16px; font-family:inherit;
+  font-weight:600; letter-spacing:.5px;
+}
+input.tin:focus{outline:none;border-color:#4b566b}
+input.tin::placeholder{color:#4b5566;font-weight:400;letter-spacing:0}
+.hint{font-size:11px; color:var(--faint); margin-top:6px; line-height:1.6}
+.list{display:flex; flex-direction:column; gap:6px; margin-top:4px}
+.li{
+  background:var(--card); border:1px solid var(--line); border-radius:11px;
+  padding:11px 13px; cursor:pointer; display:flex; align-items:center; gap:10px;
+  text-align:left; color:var(--tx); font-family:inherit; width:100%;
+}
+.li:active{background:var(--card2); transform:scale(.99)}
+.li{transition:transform .15s ease, background .15s ease}
+.li .n{font-size:16px;font-weight:800;min-width:44px;flex:none}
+.li .d{font-size:11.5px;color:var(--dim);flex:1;min-width:0;line-height:1.5}
+.li .d s{display:block;color:var(--faint);text-decoration:none;font-size:10.5px;margin-top:1px}
+.li .a{font-size:15px;color:var(--faint);flex:none}
+.li.sm .n{font-size:12.5px;min-width:26px;color:var(--dim)}
+.msg{padding:22px 6px; text-align:center; color:var(--faint); font-size:12.5px; line-height:1.7}
+.spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);
+  border-top-color:var(--now);border-radius:50%;animation:sp .7s linear infinite;
+  vertical-align:-3px;margin-right:7px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* saved list */
+.sv{
+  background:var(--card); border:1px solid var(--line); border-radius:11px;
+  padding:10px 12px; display:flex; align-items:center; gap:9px;
+}
+.sv .n{font-size:14.5px;font-weight:800;min-width:40px}
+.sv .d{flex:1;min-width:0;font-size:11px;color:var(--dim);line-height:1.5;
+  overflow:hidden;text-overflow:ellipsis}
+.sv .x{background:none;border:none;color:var(--faint);font-size:19px;
+  cursor:pointer;padding:2px 5px;font-family:inherit;flex:none}
+.sv .mv{background:none;border:none;color:var(--faint);font-size:14px;
+  cursor:pointer;padding:2px 4px;font-family:inherit;flex:none}
+.wide{
+  width:100%; background:var(--card2); border:1px solid var(--line); color:var(--tx);
+  padding:12px; border-radius:11px; font-size:13.5px; font-weight:700;
+  cursor:pointer; font-family:inherit; margin-top:9px;
+}
+.wide.p{background:linear-gradient(135deg,var(--now),#8af0c5);color:#071a14;border-color:var(--now); box-shadow:0 7px 18px rgba(54,224,160,.18)}
+.tag{
+  display:inline-block; font-size:9.5px; font-weight:800; padding:2px 5px;
+  border-radius:4px; letter-spacing:.4px; flex:none;
+}
+.tag.KMB{background:rgba(226,35,26,.16);color:#ff8079}
+.tag.CTB{background:rgba(245,166,35,.16);color:#ffc165}
+.tag.GMB{background:rgba(78,192,110,.16);color:#7fd897}
+@media(min-width:620px){
+  .board{max-width:600px;margin:0 auto;padding:14px 16px 0}
+  .top{max-width:600px;margin:0 auto}
+  .sheet{max-width:600px;margin:0 auto;border-radius:20px 20px 0 0}
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <span class="brandmark">BP</span>
+  <div class="brandcopy"><h1>BusPulse HK</h1><small>香港實時到站</small></div>
+  <span class="dot" id="dot"></span>
+  <span class="clock" id="clock">--:--:--</span>
+  <button class="iconbtn" id="refreshBtn" title="即刻更新" aria-label="即刻更新">&#8635;</button>
+</div>
+
+<div class="board" id="board"></div>
+<div class="foot">
+  資料來源：data.gov.hk 實時到站 API<br>
+  到站時間僅供參考，實際班次可能有變
+</div>
+
+<button class="fab" id="fab">＋ 設定路線</button>
+
+<div class="mask" id="mask"></div>
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <div class="shead">
+    <h2 id="sTitle">設定路線</h2>
+    <button class="iconbtn" id="closeBtn" aria-label="關閉設定">✕</button>
+  </div>
+  <div class="sbody" id="sBody"></div>
+</div>
+<script>
+'use strict';
+/* ===================================================================
+   巴士到站牌 — 三間公司 API adapter
+   KMB : data.etabus.gov.hk/v1
+   CTB : rt.data.gov.hk/v2/transport/citybus   (新巴已併入 CTB)
+   GMB : data.etagmb.gov.hk                   (綠色專線小巴)
+   =================================================================== */
+const KMB = 'https://data.etabus.gov.hk/v1/transport/kmb';
+const CTB = 'https://rt.data.gov.hk/v2/transport/citybus';
+const GMB = 'https://data.etagmb.gov.hk';
+
+const CO_NAME = { KMB:'九巴', CTB:'城巴', GMB:'小巴' };
+const REGION  = { HKI:'港島', KLN:'九龍', NT:'新界' };
+
+/* ---- fetch with timeout + JSON ---- */
+async function getJSON(url, ms = 12000) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ac.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+/* ---- in-memory cache for static data (routes / stop names) ---- */
+const memo = new Map();
+function cached(key, fn) {
+  if (!memo.has(key)) memo.set(key, fn().catch(e => { memo.delete(key); throw e; }));
+  return memo.get(key);
+}
+
+/* =========================  ROUTE SEARCH  ========================= */
+/* Returns array of variant objects, normalised across companies:
+   { co, route, dirLabel, origin, dest, ...co-specific keys }        */
+
+async function searchKMB(route) {
+  const all = (await cached('kmb:routes', () => getJSON(KMB + '/route/'))).data;
+  const R = route.toUpperCase();
+  return all.filter(r => r.route.toUpperCase() === R).map(r => ({
+    co: 'KMB', route: r.route,
+    bound: r.bound === 'O' ? 'outbound' : 'inbound',
+    dir: r.bound, service_type: r.service_type,
+    origin: r.orig_tc, dest: r.dest_tc,
+    dirLabel: r.orig_tc + ' → ' + r.dest_tc,
+    extra: r.service_type !== '1' ? '特別班次 ' + r.service_type : ''
+  }));
+}
+
+async function searchCTB(route) {
+  const R = route.toUpperCase();
+  let info;
+  try { info = (await getJSON(CTB + '/route/CTB/' + encodeURIComponent(R))).data; }
+  catch { return []; }
+  if (!info || !info.route) return [];
+  const out = [];
+  for (const b of ['inbound', 'outbound']) {
+    let stops = [];
+    try { stops = (await getJSON(CTB + '/route-stop/CTB/' + encodeURIComponent(R) + '/' + b)).data || []; }
+    catch { continue; }
+    if (!stops.length) continue;
+    const fwd = b === 'outbound';
+    out.push({
+      co: 'CTB', route: info.route, bound: b, dir: fwd ? 'O' : 'I',
+      origin: fwd ? info.orig_tc : info.dest_tc,
+      dest:   fwd ? info.dest_tc : info.orig_tc,
+      dirLabel: (fwd ? info.orig_tc : info.dest_tc) + ' → ' + (fwd ? info.dest_tc : info.orig_tc),
+      extra: ''
+    });
+  }
+  return out;
+}
+
+async function searchGMB(route) {
+  const R = route.toUpperCase();
+  const out = [];
+  for (const rg of ['HKI', 'KLN', 'NT']) {
+    let rows;
+    try { rows = (await getJSON(GMB + '/route/' + rg + '/' + encodeURIComponent(R))).data; }
+    catch { continue; }
+    for (const r of (rows || [])) {
+      for (const d of (r.directions || [])) {
+        out.push({
+          co: 'GMB', route: r.route_code, region: r.region,
+          route_id: r.route_id, route_seq: d.route_seq,
+          origin: d.orig_tc, dest: d.dest_tc,
+          dirLabel: d.orig_tc + ' → ' + d.dest_tc,
+          extra: REGION[r.region] + (r.description_tc && r.description_tc !== '正常班次' ? ' · ' + r.description_tc : '')
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function searchRoute(co, route) {
+  if (co === 'KMB') return searchKMB(route);
+  if (co === 'CTB') return searchCTB(route);
+  return searchGMB(route);
+}
+
+/* =========================  STOP LIST  ========================= */
+/* Returns [{ seq, id, name }] for a chosen route variant */
+
+async function stopsKMB(v) {
+  const rs = (await getJSON(
+    KMB + '/route-stop/' + encodeURIComponent(v.route) + '/' + v.bound + '/' + v.service_type
+  )).data;
+  const names = await cached('kmb:stops', () => getJSON(KMB + '/stop').then(d => {
+    const m = new Map(); d.data.forEach(s => m.set(s.stop, s.name_tc)); return m;
+  }));
+  return rs.map(s => ({ seq: +s.seq, id: s.stop, name: names.get(s.stop) || s.stop }));
+}
+
+async function stopsCTB(v) {
+  const rs = (await getJSON(
+    CTB + '/route-stop/CTB/' + encodeURIComponent(v.route) + '/' + v.bound
+  )).data;
+  const out = await Promise.all(rs.map(async s => {
+    let nm = s.stop;
+    try {
+      nm = (await cached('ctb:stop:' + s.stop, () => getJSON(CTB + '/stop/' + s.stop))).data.name_tc || s.stop;
+    } catch {}
+    return { seq: +s.seq, id: s.stop, name: nm };
+  }));
+  return out;
+}
+
+async function stopsGMB(v) {
+  const d = (await getJSON(GMB + '/route-stop/' + v.route_id + '/' + v.route_seq)).data;
+  return (d.route_stops || []).map(s => ({
+    seq: +s.stop_seq, id: String(s.stop_id), name: s.name_tc
+  }));
+}
+
+function routeStops(v) {
+  if (v.co === 'KMB') return stopsKMB(v);
+  if (v.co === 'CTB') return stopsCTB(v);
+  return stopsGMB(v);
+}
+
+/* =========================  ETA  ========================= */
+/* Returns { etas:[{iso, min, rmk, sched}], err } — sorted, future only */
+
+function minsFrom(iso) {
+  return Math.round((new Date(iso).getTime() - Date.now()) / 60000);
+}
+
+async function etaKMB(it) {
+  const d = (await getJSON(
+    KMB + '/route-eta/' + encodeURIComponent(it.route) + '/' + it.service_type
+  )).data;
+  return d.filter(e =>
+      e.seq === it.seq && e.dir === it.dir && e.eta
+    ).map(e => ({
+      iso: e.eta, min: minsFrom(e.eta),
+      rmk: e.rmk_tc || '', sched: /原定|預定|Scheduled/i.test(e.rmk_tc || '')
+    }));
+}
+
+async function etaCTB(it) {
+  const d = (await getJSON(
+    CTB + '/eta/CTB/' + it.stopId + '/' + encodeURIComponent(it.route)
+  )).data;
+  return (d || []).filter(e => e.eta && e.dir === it.dir).map(e => ({
+    iso: e.eta, min: minsFrom(e.eta),
+    rmk: e.rmk_tc || '', sched: /原定|預定|Scheduled/i.test(e.rmk_tc || '')
+  }));
+}
+
+async function etaGMB(it) {
+  const d = (await getJSON(
+    GMB + '/eta/route-stop/' + it.route_id + '/' + it.route_seq + '/' + it.seq
+  )).data;
+  const rows = Array.isArray(d) ? (d[0] ? d[0].eta : []) : (d.eta || []);
+  return (rows || []).filter(e => e.timestamp).map(e => ({
+    iso: e.timestamp, min: e.diff != null ? Math.round(e.diff) : minsFrom(e.timestamp),
+    rmk: e.remarks_tc || '', sched: false
+  }));
+}
+
+async function fetchETA(it) {
+  try {
+    let list = it.co === 'KMB' ? await etaKMB(it)
+             : it.co === 'CTB' ? await etaCTB(it)
+             : await etaGMB(it);
+    list = list.filter(e => e.min >= -2).sort((a, b) => a.min - b.min).slice(0, 4);
+    return { etas: list, err: null };
+  } catch (e) {
+    return { etas: [], err: e.name === 'AbortError' ? '連線超時' : '讀取失敗' };
+  }
+}
+/* ===================================================================
+   STATE + STORAGE
+   =================================================================== */
+const KEY = 'busboard.items.v1';
+
+/* 預設：你話要預設路線，呢四條係示範，可以喺頁面「設定路線」隨時改。
+   每一項 = 一條路線嘅一個方向 + 一個站頭。                          */
+const DEFAULTS = [
+  { co:'KMB', route:'1A', bound:'outbound', dir:'O', service_type:'1',
+    seq:1,  stopId:'A3ADFCDF8487ADB9', stopName:'中秀茂坪 (KT975)', dest:'尖沙咀碼頭' },
+  { co:'KMB', route:'89', bound:'outbound', dir:'O', service_type:'1',
+    seq:1,  stopId:'588AC7E77A3E3DB6', stopName:'瀝源巴士總站 (ST946)', dest:'觀塘(翠屏北邨)' },
+  { co:'CTB', route:'1',  bound:'inbound',  dir:'I',
+    seq:1,  stopId:'002403', stopName:'跑馬地 (上)', dest:'中環(港澳碼頭)' },
+  { co:'CTB', route:'6',  bound:'outbound', dir:'O',
+    seq:1,  stopId:'001032', stopName:'中環 (交易廣場)', dest:'赤柱市場' }
+];
+
+let items = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) return a; }
+  } catch {}
+  return DEFAULTS.slice();
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
+}
+const uid = it => [it.co, it.route, it.dir || it.route_seq, it.stopId || it.seq].join('|');
+
+/* ===================================================================
+   BOARD RENDER
+   =================================================================== */
+const $ = s => document.querySelector(s);
+const board = $('#board'), dot = $('#dot'), clock = $('#clock');
+let lastOK = 0, inFlight = false;
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function shell() {
+  if (!items.length) {
+    board.innerHTML =
+      '<div class="empty"><div class="big">&#128652;</div>' +
+      '<p>仲未揀路線<br>揿右下角<b>＋ 設定路線</b>加你嘅巴士</p></div>';
+    return;
+  }
+  board.innerHTML = items.map(it => {
+    const id = esc(uid(it));
+    return '<div class="card" data-co="' + it.co + '" data-id="' + id + '">' +
+      '<div class="chead">' +
+        '<span class="rt">' + esc(it.route) + '</span>' +
+        '<span class="co ' + it.co + '">' + CO_NAME[it.co] + '</span>' +
+        '<span class="dest">往 ' + esc(it.dest || '') + '</span>' +
+      '</div>' +
+      '<div class="stop">&#128205; <b>' + esc(it.stopName || '') + '</b></div>' +
+      '<div class="etas" data-slot="' + id + '">' +
+        '<div class="eta"><div class="m pulse">··</div><div class="u">載入中</div></div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function paint(it, res) {
+  const slot = board.querySelector('[data-slot="' + CSS.escape(uid(it)) + '"]');
+  if (!slot) return;
+  const card = slot.closest('.card');
+  const old = card.querySelector('.rmk, .none');
+  if (old) old.remove();
+
+  if (res.err) {
+    slot.innerHTML = '<div class="eta"><div class="m" style="font-size:14px;color:var(--faint)">—</div>' +
+                     '<div class="u">' + esc(res.err) + '</div></div>';
+    return;
+  }
+  if (!res.etas.length) {
+    slot.innerHTML = '';
+    card.insertAdjacentHTML('beforeend', '<div class="none">暫時冇班次資料（可能已收車）</div>');
+    return;
+  }
+  slot.innerHTML = res.etas.map((e, i) => {
+    const hhmm = new Date(e.iso).toLocaleTimeString('en-GB',
+      { hour:'2-digit', minute:'2-digit', hour12:false });
+    const cls = ['eta', 'i' + Math.min(i, 2)];
+    if (e.sched) cls.push('sch');
+    let big;
+    if (e.min <= 0) { cls.push('arr'); big = '<div class="m">即將到達</div><div class="u">&nbsp;</div>'; }
+    else            { big = '<div class="m">' + e.min + '</div><div class="u">分鐘</div>'; }
+    return '<div class="' + cls.join(' ') + '">' + big +
+           '<div class="t">' + hhmm + '</div></div>';
+  }).join('');
+
+  const rmks = [...new Set(res.etas.map(e => e.rmk).filter(Boolean))];
+  if (rmks.length) {
+    card.insertAdjacentHTML('beforeend',
+      '<div class="rmk">' + rmks.map(r => '<span>&#9432; ' + esc(r) + '</span>').join('') + '</div>');
+  }
+}
+
+async function refresh() {
+  if (inFlight || !items.length) return;
+  inFlight = true;
+  dot.className = 'dot';
+  const snapshot = items.slice();
+  const results = await Promise.all(snapshot.map(fetchETA));
+  snapshot.forEach((it, i) => {
+    if (items.some(x => uid(x) === uid(it))) paint(it, results[i]);
+  });
+  const anyOK = results.some(r => !r.err);
+  if (anyOK) lastOK = Date.now();
+  dot.className = 'dot' + (anyOK ? '' : ' err');
+  inFlight = false;
+}
+
+/* clock + staleness indicator */
+setInterval(() => {
+  clock.textContent = new Date().toLocaleTimeString('en-GB', { hour12:false });
+  if (lastOK && Date.now() - lastOK > 75000 && !inFlight) dot.className = 'dot stale';
+}, 1000);
+
+/* auto refresh every 25s, pause when tab hidden, resume on focus */
+let timer = null;
+function startLoop() {
+  stopLoop();
+  refresh();
+  timer = setInterval(refresh, 25000);
+}
+function stopLoop() { if (timer) { clearInterval(timer); timer = null; } }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopLoop(); else startLoop();
+});
+$('#refreshBtn').addEventListener('click', () => { refresh(); });
+/* ===================================================================
+   SETTINGS SHEET
+   =================================================================== */
+const mask = $('#mask'), sheet = $('#sheet'), sBody = $('#sBody'), sTitle = $('#sTitle');
+let pickCo = 'KMB';
+
+function openSheet() { mask.classList.add('on'); sheet.classList.add('on'); }
+function closeSheet() { mask.classList.remove('on'); sheet.classList.remove('on'); }
+mask.addEventListener('click', closeSheet);
+$('#closeBtn').addEventListener('click', closeSheet);
+$('#fab').addEventListener('click', () => { viewHome(); openSheet(); });
+
+/* ---------- view 1: home (saved list + add) ---------- */
+function viewHome() {
+  sTitle.textContent = '設定路線';
+  let h = '<div class="lbl">我嘅路線牌（' + items.length + '）</div>';
+  if (!items.length) {
+    h += '<div class="msg">仲未加任何路線</div>';
+  } else {
+    h += '<div class="list">' + items.map((it, i) =>
+      '<div class="sv">' +
+        '<span class="tag ' + it.co + '">' + CO_NAME[it.co] + '</span>' +
+        '<span class="n">' + esc(it.route) + '</span>' +
+        '<span class="d">' + esc(it.stopName) + '<br>往 ' + esc(it.dest || '') + '</span>' +
+        '<button class="mv" data-up="' + i + '" ' + (i === 0 ? 'disabled style="opacity:.25"' : '') + '>&#9650;</button>' +
+        '<button class="mv" data-dn="' + i + '" ' + (i === items.length - 1 ? 'disabled style="opacity:.25"' : '') + '>&#9660;</button>' +
+        '<button class="x" data-del="' + i + '">&times;</button>' +
+      '</div>').join('') + '</div>';
+  }
+  h += '<button class="wide p" id="addBtn">＋ 加新路線</button>';
+  h += '<div class="lbl">其他</div>';
+  h += '<button class="wide" id="installBtn" style="display:none">&#128241; 安裝到主畫面</button>';
+  h += '<button class="wide" id="resetBtn">回復預設路線</button>';
+  h += '<div class="hint">設定會存喺呢部機嘅瀏覽器，下次開返一樣。</div>';
+  sBody.innerHTML = h;
+  sBody.scrollTop = 0;
+
+  sBody.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    items.splice(+b.dataset.del, 1); save(); shell(); refresh(); viewHome();
+  }));
+  sBody.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.up; if (i < 1) return;
+    [items[i-1], items[i]] = [items[i], items[i-1]];
+    save(); shell(); refresh(); viewHome();
+  }));
+  sBody.querySelectorAll('[data-dn]').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.dn; if (i >= items.length - 1) return;
+    [items[i+1], items[i]] = [items[i], items[i+1]];
+    save(); shell(); refresh(); viewHome();
+  }));
+  $('#addBtn').addEventListener('click', viewSearch);
+  $('#resetBtn').addEventListener('click', () => {
+    items = DEFAULTS.slice(); save(); shell(); refresh(); viewHome();
+  });
+  if (deferredPrompt) {
+    const ib = $('#installBtn');
+    ib.style.display = 'block';
+    ib.addEventListener('click', doInstall);
+  }
+}
+
+/* ---------- view 2: search route number ---------- */
+function viewSearch() {
+  sTitle.textContent = '加新路線';
+  sBody.innerHTML =
+    '<div class="lbl">巴士公司</div>' +
+    '<div class="segs" id="segs">' +
+      ['KMB','CTB','GMB'].map(c =>
+        '<button class="seg' + (c === pickCo ? ' on' : '') + '" data-co="' + c + '">' +
+        (c === 'KMB' ? '九巴／龍運' : c === 'CTB' ? '城巴／新巴' : '綠色小巴') +
+        '</button>').join('') +
+    '</div>' +
+    '<div class="lbl">路線號碼</div>' +
+    '<input class="tin" id="rIn" placeholder="例如 1A、89、往 108…" autocomplete="off" ' +
+      'autocapitalize="characters" enterkeyhint="search">' +
+    '<div class="hint" id="rHint">輸入號碼然後揿「搵路線」。小巴只有綠色專線小巴有實時數據。</div>' +
+    '<button class="wide p" id="goBtn">搵路線</button>' +
+    '<div id="rOut"></div>' +
+    '<button class="wide" id="backBtn">← 返回</button>';
+  sBody.scrollTop = 0;
+
+  sBody.querySelectorAll('.seg').forEach(b => b.addEventListener('click', () => {
+    pickCo = b.dataset.co;
+    sBody.querySelectorAll('.seg').forEach(x => x.classList.toggle('on', x === b));
+    $('#rOut').innerHTML = '';
+  }));
+  $('#backBtn').addEventListener('click', viewHome);
+  const inp = $('#rIn');
+  $('#goBtn').addEventListener('click', () => doSearch(inp.value.trim()));
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(inp.value.trim()); });
+  setTimeout(() => inp.focus(), 260);
+}
+
+async function doSearch(q) {
+  const out = $('#rOut');
+  if (!q) { out.innerHTML = '<div class="msg">請輸入路線號碼</div>'; return; }
+  out.innerHTML = '<div class="msg"><span class="spin"></span>搵緊 ' + esc(q) + ' …</div>';
+  let vs = [];
+  try { vs = await searchRoute(pickCo, q); }
+  catch { out.innerHTML = '<div class="msg">讀取失敗，請檢查網絡再試</div>'; return; }
+  vs.sort((a, b) => (a.dirLabel || '').localeCompare(b.dirLabel || '', 'zh-HK'));
+  if (!vs.length) {
+    out.innerHTML = '<div class="msg">搵唔到 <b>' + esc(q.toUpperCase()) + '</b><br>' +
+      '睇下係唔係揀錯公司，或者號碼有冇打錯</div>';
+    return;
+  }
+  window.__vs = vs;
+  out.innerHTML = '<div class="lbl">揀方向（' + vs.length + '）</div><div class="list">' +
+    vs.map((v, i) =>
+      '<button class="li" data-v="' + i + '">' +
+        '<span class="n">' + esc(v.route) + '</span>' +
+        '<span class="d">' + esc(v.dirLabel) +
+          (v.extra ? '<s>' + esc(v.extra) + '</s>' : '') + '</span>' +
+        '<span class="a">›</span>' +
+      '</button>').join('') + '</div>';
+  out.querySelectorAll('[data-v]').forEach(b =>
+    b.addEventListener('click', () => viewStops(window.__vs[+b.dataset.v])));
+}
+
+/* ---------- view 3: pick stop ---------- */
+async function viewStops(v) {
+  sTitle.textContent = v.route + ' — 揀站頭';
+  sBody.innerHTML = '<div class="msg"><span class="spin"></span>載入站頭 …</div>';
+  sBody.scrollTop = 0;
+  let stops;
+  try { stops = await routeStops(v); }
+  catch {
+    sBody.innerHTML = '<div class="msg">站頭讀取失敗</div>' +
+      '<button class="wide" id="bk">← 返回</button>';
+    $('#bk').addEventListener('click', viewSearch);
+    return;
+  }
+  sBody.innerHTML =
+    '<div class="lbl">' + esc(v.dirLabel) + '</div>' +
+    '<div class="hint" style="margin:0 0 10px">揀你上車嗰個站（' + stops.length + ' 個）</div>' +
+    '<div class="list">' + stops.map((s, i) =>
+      '<button class="li sm" data-s="' + i + '">' +
+        '<span class="n">' + s.seq + '</span>' +
+        '<span class="d">' + esc(s.name) + '</span>' +
+        '<span class="a">＋</span>' +
+      '</button>').join('') + '</div>' +
+    '<button class="wide" id="bk">← 返回</button>';
+  $('#bk').addEventListener('click', viewSearch);
+  sBody.querySelectorAll('[data-s]').forEach(b =>
+    b.addEventListener('click', () => addItem(v, stops[+b.dataset.s])));
+}
+
+function addItem(v, s) {
+  const it = v.co === 'GMB'
+    ? { co:'GMB', route:v.route, region:v.region, route_id:v.route_id,
+        route_seq:v.route_seq, seq:s.seq, stopId:s.id, stopName:s.name, dest:v.dest }
+    : v.co === 'KMB'
+    ? { co:'KMB', route:v.route, bound:v.bound, dir:v.dir, service_type:v.service_type,
+        seq:s.seq, stopId:s.id, stopName:s.name, dest:v.dest }
+    : { co:'CTB', route:v.route, bound:v.bound, dir:v.dir,
+        seq:s.seq, stopId:s.id, stopName:s.name, dest:v.dest };
+  if (items.some(x => uid(x) === uid(it))) { viewHome(); return; }
+  items.push(it); save(); shell(); refresh(); viewHome();
+}
+
+/* ===================================================================
+   PWA INSTALL
+   =================================================================== */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; });
+async function doInstall() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () =>
+    navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+/* ===================================================================
+   BOOT
+   =================================================================== */
+shell();
+startLoop();
+</script>
+</body>
+</html>
