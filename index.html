@@ -533,8 +533,8 @@ async function toggleMap(it, button) {
   if (!wrap) return;
   const open = wrap.classList.toggle('open');
   button.classList.toggle('open', open);
-  if (!open) { button.querySelector('span').textContent = '🗺 查看站頭與路線地圖'; return; }
-  button.querySelector('span').textContent = '🗺 收起地圖';
+  if (!open) { const label = button.querySelector('span'); if (label) label.textContent = '🗺 查看站頭與路線地圖'; return; }
+  const label = button.querySelector('span'); if (label) label.textContent = '🗺 收起地圖';
   if (mapCache.has(id)) { setTimeout(() => mapCache.get(id).invalidateSize(), 80); return; }
   const mapEl = wrap.querySelector('.route-map');
   mapEl.innerHTML = '<div class="map-loading"><span class="spin"></span>載入站頭位置…</div>';
