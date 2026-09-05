@@ -97,9 +97,9 @@ body{
 .map-toggle:active{transform:scale(.99);background:rgba(108,140,255,.18)}
 .map-toggle .map-arrow{font-size:15px;line-height:1;transition:transform .2s ease}.map-toggle.open .map-arrow{transform:rotate(180deg)}
 .map-wrap{display:none;margin:0 13px 12px 15px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#dbe7ef}
-.map-wrap.open{display:block}.route-map{height:250px;width:100%;z-index:1}.map-note{padding:7px 10px;background:rgba(16,24,39,.94);color:var(--faint);font-size:10px;line-height:1.4}
+.map-wrap.open{display:block}.map-tools{display:flex;gap:7px;padding:8px;background:rgba(16,24,39,.95)}.locate-btn{border:1px solid rgba(99,216,137,.35);background:rgba(99,216,137,.12);color:#a7f1bf;border-radius:9px;padding:8px 10px;font:700 11px inherit;cursor:pointer}.locate-btn:active{transform:scale(.98)}.route-map{height:250px;width:100%;z-index:1}.map-note{padding:7px 10px;background:rgba(16,24,39,.94);color:var(--faint);font-size:10px;line-height:1.4}
 .map-loading{height:250px;display:grid;place-items:center;color:#53657e;font-size:12px}
-.leaflet-container{font-family:inherit}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#17233a;color:#f4f7fb}.leaflet-popup-content{font-size:12px;line-height:1.5}.leaflet-control-zoom a{color:#23344e}
+.leaflet-container{font-family:inherit}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#17233a;color:#f4f7fb}.leaflet-popup-content{font-size:12px;line-height:1.5}.leaflet-control-zoom a{color:#23344e}.popup-select{margin-top:5px;border:0;border-radius:7px;padding:6px 9px;background:var(--now);color:#071a14;font:700 11px inherit;cursor:pointer}
 .rmk{
   padding:0 13px 11px 15px; font-size:10.5px; color:var(--faint);
   display:flex; flex-wrap:wrap; gap:4px 8px;
@@ -270,7 +270,7 @@ function cached(key, fn) {
 async function searchKMB(route) {
   const all = (await cached('kmb:routes', () => getJSON(KMB + '/route/'))).data;
   const R = route.toUpperCase();
-  return all.filter(r => r.route.toUpperCase() === R).map(r => ({
+  return all.filter(r => r.route.toUpperCase().startsWith(R)).map(r => ({
     co: 'KMB', route: r.route,
     bound: r.bound === 'O' ? 'outbound' : 'inbound',
     dir: r.bound, service_type: r.service_type,
@@ -280,7 +280,7 @@ async function searchKMB(route) {
   }));
 }
 
-async function searchCTB(route) {
+async function searchCTBExact(route) {
   const R = route.toUpperCase();
   let info;
   try { info = (await getJSON(CTB + '/route/CTB/' + encodeURIComponent(R))).data; }
@@ -304,22 +304,35 @@ async function searchCTB(route) {
   return out;
 }
 
+async function searchCTB(route) {
+  const R = route.toUpperCase();
+  let all = [];
+  try { all = (await getJSON(CTB + '/route/CTB')).data || []; } catch { return []; }
+  const matches = [...new Set(all.map(x => x.route).filter(x => x.toUpperCase().startsWith(R)))];
+  const results = await Promise.all(matches.slice(0, 25).map(searchCTBExact));
+  return results.flat();
+}
+
 async function searchGMB(route) {
   const R = route.toUpperCase();
   const out = [];
   for (const rg of ['HKI', 'KLN', 'NT']) {
-    let rows;
-    try { rows = (await getJSON(GMB + '/route/' + rg + '/' + encodeURIComponent(R))).data; }
-    catch { continue; }
-    for (const r of (rows || [])) {
-      for (const d of (r.directions || [])) {
-        out.push({
-          co: 'GMB', route: r.route_code, region: r.region,
-          route_id: r.route_id, route_seq: d.route_seq,
-          origin: d.orig_tc, dest: d.dest_tc,
-          dirLabel: d.orig_tc + ' → ' + d.dest_tc,
-          extra: REGION[r.region] + (r.description_tc && r.description_tc !== '正常班次' ? ' · ' + r.description_tc : '')
-        });
+    let codes = [];
+    try { codes = (await getJSON(GMB + '/route/' + rg)).data?.routes || []; } catch { continue; }
+    const matches = codes.filter(code => code.toUpperCase().startsWith(R)).slice(0, 25);
+    for (const code of matches) {
+      let rows;
+      try { rows = (await getJSON(GMB + '/route/' + rg + '/' + encodeURIComponent(code))).data; } catch { continue; }
+      for (const r of (rows || [])) {
+        for (const d of (r.directions || [])) {
+          out.push({
+            co: 'GMB', route: r.route_code, region: r.region,
+            route_id: r.route_id, route_seq: d.route_seq,
+            origin: d.orig_tc, dest: d.dest_tc,
+            dirLabel: d.orig_tc + ' → ' + d.dest_tc,
+            extra: REGION[r.region] + (r.description_tc && r.description_tc !== '正常班次' ? ' · ' + r.description_tc : '')
+          });
+        }
       }
     }
   }
@@ -491,12 +504,16 @@ function shell() {
       '<div class="map-actions"><button class="map-toggle" data-map-id="' + id + '">' +
         '<span>🗺 查看站頭與路線地圖</span><span class="map-arrow">⌄</span>' +
       '</button></div>' +
-      '<div class="map-wrap" data-map-wrap="' + id + '"><div class="route-map"></div></div>' +
+      '<div class="map-wrap" data-map-wrap="' + id + '"><div class="map-tools"><button class="locate-btn" data-locate-id="' + id + '">⌖ 定位我附近</button></div><div class="route-map"></div></div>' +
     '</div>';
   }).join('');
   board.querySelectorAll('[data-map-id]').forEach(button => {
     const item = items.find(x => uid(x) === button.dataset.mapId);
     if (item) button.addEventListener('click', () => toggleMap(item, button));
+  });
+  board.querySelectorAll('[data-locate-id]').forEach(button => {
+    const item = items.find(x => uid(x) === button.dataset.locateId);
+    if (item) button.addEventListener('click', () => locateOnExistingMap(item));
   });
 }
 
@@ -552,13 +569,43 @@ async function showSetupMap(v, stops, button) {
   L.polyline(points, { color: '#6c8cff', weight: 5, opacity: .72, dashArray: '8 7' }).addTo(map);
   valid.forEach(st => {
     const marker = L.circleMarker([st.lat, st.lng], { radius: 6, color: '#6c8cff', weight: 2, fillColor: '#a9baff', fillOpacity: .95 });
-    marker.bindPopup('<b>第 ' + st.seq + ' 站</b><br>' + esc(st.name));
+    marker.bindPopup('<b>第 ' + st.seq + ' 站</b><br>' + esc(st.name) + '<br><button class="popup-select" data-stop-id="' + esc(st.id) + '">用呢個站</button>');
+    marker.on('popupopen', e => { const b = e.popup.getElement().querySelector('.popup-select'); if (b) b.addEventListener('click', () => { const chosen = stops.find(x => String(x.id) === b.dataset.stopId); if (chosen) addItem(v, chosen); closeSheet(); }); });
     marker.addTo(map);
   });
   map.fitBounds(L.latLngBounds(points), { padding: [18, 18], maxZoom: 15 });
   mapEl.dataset.ready = '1';
+  const locateBtn = $('#locateBtn');
+  if (locateBtn) locateBtn.addEventListener('click', () => locateOnMap(map, valid, locateBtn));
 }
 let setupMapInstance = null;
+
+function nearestStop(stops, lat, lng) {
+  return stops.reduce((best, st) => {
+    const d = Math.pow(st.lat - lat, 2) + Math.pow(st.lng - lng, 2);
+    return !best || d < best.d ? { st, d } : best;
+  }, null)?.st;
+}
+
+function locateOnMap(map, stops, button) {
+  if (!navigator.geolocation) { button.textContent = '此瀏覽器不支援定位'; return; }
+  button.textContent = '⌖ 定位中…';
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    if (window.__userMarker) window.__userMarker.remove();
+    window.__userMarker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#ff625c', fillOpacity: .95 }).addTo(map).bindPopup('<b>你目前位置</b>').openPopup();
+    map.setView([lat, lng], 17);
+    const near = nearestStop(stops, lat, lng);
+    if (near) map.eachLayer(layer => { if (layer.getLatLng && Math.abs(layer.getLatLng().lat-near.lat)<1e-8 && Math.abs(layer.getLatLng().lng-near.lng)<1e-8) layer.openPopup(); });
+    button.textContent = '⌖ 已定位到附近';
+  }, () => { button.textContent = '⌖ 定位失敗，請允許 GPS'; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+}
+
+function locateOnExistingMap(it) {
+  const map = mapCache.get(uid(it));
+  if (!map) return;
+  routeStops(it).then(stops => locateOnMap(map, stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng)), board.querySelector('[data-locate-id="' + CSS.escape(uid(it)) + '"]')));
+}
 
 function paint(it, res) {
   const slot = board.querySelector('[data-slot="' + CSS.escape(uid(it)) + '"]');
@@ -719,7 +766,9 @@ function viewSearch() {
   $('#backBtn').addEventListener('click', viewHome);
   const inp = $('#rIn');
   $('#goBtn').addEventListener('click', () => doSearch(inp.value.trim()));
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(inp.value.trim()); });
+  let searchTimer;
+  inp.addEventListener('input', () => { clearTimeout(searchTimer); const q = inp.value.trim(); if (!q) { $('#rOut').innerHTML = ''; return; } searchTimer = setTimeout(() => doSearch(q), 380); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(searchTimer); doSearch(inp.value.trim()); } });
   setTimeout(() => inp.focus(), 260);
 }
 
@@ -766,7 +815,7 @@ async function viewStops(v) {
   sBody.innerHTML =
     '<div class="lbl">' + esc(v.dirLabel) + '</div>' +
     '<div class="map-actions" style="padding:0 0 10px"><button class="map-toggle" id="setupMapBtn"><span>🗺 先睇全條路線地圖</span><span class="map-arrow">⌄</span></button></div>' +
-    '<div class="map-wrap" id="setupMapWrap"><div class="route-map"></div><div class="map-note">藍色虛線按官方站序連接，撳任何站點可以睇站名。</div></div>' +
+    '<div class="map-wrap" id="setupMapWrap"><div class="map-tools"><button class="locate-btn" id="locateBtn">⌖ 定位我附近</button></div><div class="route-map"></div><div class="map-note">藍色虛線按官方站序連接，撳任何站點可以睇站名。</div></div>' +
     '<div class="hint" style="margin:0 0 10px">睇完地圖後，揀你上車嗰個站（' + stops.length + ' 個）</div>' +
     '<div class="list">' + stops.map((s, i) =>
       '<button class="li sm" data-s="' + i + '">' +
