@@ -498,6 +498,8 @@ const esc = s => String(s == null ? '' : s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const cssEscape = s => (globalThis.CSS && typeof CSS.escape === 'function') ? CSS.escape(String(s)) : String(s).replace(/[^a-zA-Z0-9_-]/g, ch => '\\' + ch.charCodeAt(0).toString(16) + ' ');
 let lastOK = 0, inFlight = false;
+const latestResults = new Map();
+let pipWindow = null;
 const mapCache = new Map();
 const fareMemo = new Map();
 async function fareData() {
@@ -591,6 +593,32 @@ function checkAlarms(it, res) {
   alarmSeen.set(uid(it), key);
   notifyArrival(it, eta.min);
 }
+function renderPip() {
+  if (!pipWindow || pipWindow.closed) return;
+  const root = pipWindow.document.querySelector('#pipRoot');
+  if (!root) return;
+  root.innerHTML = '<div class="pipTitle">港巴即時 <span>BusPulse HK</span></div>' + items.map(it => {
+    const r = latestResults.get(uid(it));
+    const e = r?.etas?.[0];
+    const value = r?.err ? '—' : e ? (e.min <= 0 ? '即將到站' : e.min + ' 分鐘') : '讀取中';
+    return '<div class="pipRow"><b>' + esc(it.route) + '</b><span>' + esc(it.stopName || '') + '</span><strong>' + value + '</strong></div>';
+  }).join('');
+}
+async function openMiniWindow(button) {
+  if (!('documentPictureInPicture' in window)) { button.textContent = '此瀏覽器未支援，請用分割畫面'; return; }
+  try {
+    if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
+    pipWindow = await window.documentPictureInPicture.requestWindow({ width: 310, height: 240 });
+    const style = pipWindow.document.createElement('style');
+    style.textContent = 'html,body{margin:0;background:#101827;color:#f4f7fb;font:13px system-ui,sans-serif}body{padding:12px}.pipTitle{font-weight:800;color:#36e0a0;margin-bottom:9px}.pipTitle span{font-size:10px;color:#71809a;margin-left:5px}.pipRow{display:grid;grid-template-columns:42px 1fr auto;gap:6px;align-items:center;padding:9px 0;border-top:1px solid rgba(151,173,207,.18)}.pipRow b{font-size:17px;color:#ffd166}.pipRow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#aab7cc;font-size:11px}.pipRow strong{font-size:14px;color:#36e0a0;white-space:nowrap}';
+    pipWindow.document.head.appendChild(style);
+    pipWindow.document.body.innerHTML = '<div id="pipRoot"></div>';
+    pipWindow.addEventListener('pagehide', () => { pipWindow = null; });
+    renderPip();
+    button.textContent = '▣ 小窗已開啟';
+  } catch { button.textContent = '小窗未能開啟，請用分割畫面'; }
+}
+
 async function requestNotifications() { if ('Notification' in window && Notification.permission === 'default') try { await Notification.requestPermission(); } catch {} }
 
 async function roadPath(stops) {
@@ -740,7 +768,8 @@ async function refresh() {
   const snapshot = items.slice();
   const results = await Promise.all(snapshot.map(fetchETA));
   snapshot.forEach((it, i) => {
-    if (items.some(x => uid(x) === uid(it))) { paint(it, results[i]); checkAlarms(it, results[i]); }
+    if (items.some(x => uid(x) === uid(it))) { latestResults.set(uid(it), results[i]); paint(it, results[i]); checkAlarms(it, results[i]); }
+  renderPip();
   });
   const anyOK = results.some(r => !r.err);
   if (anyOK) lastOK = Date.now();
@@ -786,6 +815,8 @@ function viewPrefs() {
   '<div class="lbl">到站／落車提醒</div>' +
     '<div class="pref-row"><div>提早幾多分鐘響鬧<small>揀咗路線卡上方嘅 🔔 後生效；卡片所選站頭就係提醒目標站</small></div><select class="pref-select" id="leadSel"><option value="1">1 分鐘</option><option value="2">2 分鐘</option><option value="3">3 分鐘</option><option value="5">5 分鐘</option></select></div>' +
     '<button class="wide" id="notifyBtn">允許系統通知</button>' +
+    '<button class="wide" id="miniBtn">▣ 開啟最上層小窗</button>' +
+    '<div class="hint">小窗會顯示簡化 ETA，讓你可以一邊聽音樂一邊睇巴士；手機瀏覽器若不支援，請使用 Android 分割畫面。</div>' +
     '<div class="lbl">外觀</div>' +
     '<div class="pref-row"><div>字體大小<small>只影響主畫面閱讀大小</small></div><select class="pref-select" id="fontSel"><option value="normal">標準</option><option value="large">較大</option></select></div>' +
     '<div class="pref-row"><div>時間顯示<small>ETA 卡片時間及頂部時鐘</small></div><select class="pref-select" id="timeSel"><option value="false">24 小時制</option><option value="true">12 小時制</option></select></div>' +
@@ -797,6 +828,7 @@ function viewPrefs() {
   $('#timeSel').addEventListener('change', e => { prefs.time12=e.target.value === 'true'; savePrefs(); });
   $('#themeSel').addEventListener('change', e => { prefs.theme=e.target.value; savePrefs(); applyPrefs(); });
   $('#notifyBtn').addEventListener('click', async e => { await requestNotifications(); e.currentTarget.textContent = ('Notification' in window && Notification.permission === 'granted') ? '系統通知已允許' : '未能允許系統通知'; });
+  $('#miniBtn').addEventListener('click', e => openMiniWindow(e.currentTarget));
   $('#prefsBack').addEventListener('click', viewHome);
 }
 
