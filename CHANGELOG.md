@@ -64,3 +64,16 @@
 
 - Repository：<https://github.com/cw91020251212/gang-baa-im-si-buspulse-hk>
 - 網站：<https://cw91020251212.github.io/gang-baa-im-si-buspulse-hk/>
+
+## 2026-09-07 — 加入夜間測試通知
+
+### 修改內容
+
+- 在「顯示與提醒設定」加入「測試背景通知」按鈕。
+- 測試按鈕會先申請系統通知權限，再經由 Service Worker 發出一個模擬到站通知。
+- 測試通知不會呼叫巴士 API、不會更改路線、不會開啟真實鬧鐘；只用來確認手機的背景通知通道。
+- Service Worker 快取版本更新至 `buspulse-hk-shell-v5`。
+
+### 測試方法
+
+開啟網站 → 按齒輪 →「顯示與提醒設定」→「測試背景通知」。收到「港巴即時測試提示」後，可以切到其他 App 或鎖屏，再進行真實鬧鐘測試。
