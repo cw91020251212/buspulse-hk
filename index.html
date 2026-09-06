@@ -195,7 +195,7 @@ input.tin::placeholder{color:#4b5566;font-weight:400;letter-spacing:0}
   padding:12px; border-radius:11px; font-size:13.5px; font-weight:700;
   cursor:pointer; font-family:inherit; margin-top:9px;
 }
-.wide.danger{color:#ffaaa5;border-color:rgba(255,98,92,.3);background:rgba(255,98,92,.06)}
+.backup-box{margin-top:12px;padding:10px;border:1px solid rgba(255,209,102,.28);border-radius:10px;background:rgba(255,209,102,.07);color:var(--dim);font-size:11px;line-height:1.45}.backup-box .wide{margin-top:7px}.backup-actions{display:flex;gap:7px}.backup-actions .wide{flex:1}.wide.danger{color:#ffaaa5;border-color:rgba(255,98,92,.3);background:rgba(255,98,92,.06)}
 .wide.p{background:linear-gradient(135deg,var(--now),#8af0c5);color:#071a14;border-color:var(--now); box-shadow:0 7px 18px rgba(54,224,160,.18)}
 .tag{
   display:inline-block; font-size:9.5px; font-weight:800; padding:2px 5px;
@@ -466,6 +466,29 @@ function loadPrefs() { try { return Object.assign({ lead:2, time12:false, theme:
 function loadAlarms() { try { return JSON.parse(localStorage.getItem(ALARM_KEY) || '{}') || {}; } catch { return {}; } }
 function savePrefs() { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {} }
 function saveAlarms() { try { localStorage.setItem(ALARM_KEY, JSON.stringify(alarms)); } catch {} }
+function exportBackup() {
+  const payload = { format:'BusPulse HK backup', version:1, exportedAt:new Date().toISOString(), items, userDefaults, alarms, getoff, prefs };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='buspulse-hk-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  try { localStorage.setItem('busboard.last-backup.v1', new Date().toISOString()); } catch {}
+  const n=document.querySelector('#backupNote'); if(n) n.textContent='已下載備份檔；建議儲存到雲端或另一部裝置。';
+}
+function importBackup(file) {
+  const reader=new FileReader(); reader.onload=() => {
+    try {
+      const p=JSON.parse(reader.result);
+      if (!p || p.format !== 'BusPulse HK backup' || !Array.isArray(p.items)) throw new Error('format');
+      if (!confirm('確定要還原呢份備份嗎？目前路線、預設路線及設定會由備份內容取代。')) return;
+      items=p.items; userDefaults=Array.isArray(p.userDefaults)?p.userDefaults:[]; alarms=p.alarms && typeof p.alarms==='object'?p.alarms:{}; getoff=p.getoff && typeof p.getoff==='object'?p.getoff:{}; if(p.prefs && typeof p.prefs==='object') prefs=Object.assign(prefs,p.prefs);
+      save(); saveUserDefaults(); saveAlarms(); saveGetoff(); savePrefs(); applyPrefs(); shell(); refresh(); viewHome();
+      alert('備份還原完成。');
+    } catch { alert('呢份檔案唔係有效嘅 BusPulse HK 備份。'); }
+  }; reader.readAsText(file);
+}
+function backupReminder() {
+  try { const last=localStorage.getItem('busboard.last-backup.v1'); if(!last) return '重要資料可能會因清除瀏覽器網站資料而消失，建議立即下載備份。'; const days=(Date.now()-new Date(last).getTime())/86400000; if(days>14) return '你上次備份已超過兩星期，建議重新下載一份最新備份。'; return '備份檔只會儲存喺你下載嘅位置，請唔好同瀏覽器網站資料一齊清除。'; } catch { return '建議定期下載備份檔，避免瀏覽器清除網站資料後遺失路線。'; }
+}
 function applyPrefs() { document.body.classList.toggle('light', prefs.theme === 'light'); document.body.classList.toggle('font-large', prefs.font === 'large'); }
 applyPrefs();
 
@@ -1031,6 +1054,7 @@ function viewHome() {
   }
   h += '<button class="wide p" id="addBtn">＋ 加新路線</button>';
   h += '<div class="lbl">其他</div>';
+  h += '<div class="backup-box"><b>資料備份</b><br><span id="backupNote">' + backupReminder() + '</span><div class="backup-actions"><button class="wide" id="exportBtn">⬇ 下載備份</button><button class="wide" id="importBtn">⬆ 還原備份</button></div><input type="file" id="backupFile" accept="application/json,.json" style="display:none"></div>';
   h += '<button class="wide" id="installBtn" style="display:none">&#128241; 安裝到主畫面</button>';
   h += '<button class="wide" id="saveDefaultBtn">將目前路線儲存為預設</button>';
   h += '<button class="wide" id="loadDefaultBtn" ' + (userDefaults.length ? '' : 'disabled') + '>使用預設路線' + (userDefaults.length ? '（' + userDefaults.length + ' 條）' : '（尚未設定）') + '</button>';
@@ -1054,6 +1078,9 @@ function viewHome() {
     save(); shell(); refresh(); viewHome();
   }));
   $('#addBtn').addEventListener('click', viewSearch);
+  $('#exportBtn').addEventListener('click', exportBackup);
+  $('#importBtn').addEventListener('click', () => $('#backupFile').click());
+  $('#backupFile').addEventListener('change', e => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; });
   $('#saveDefaultBtn').addEventListener('click', () => {
     if (!items.length) { alert('請先加入至少一條路線，先可以儲存為預設。'); return; }
     userDefaults = items.map(x => ({...x})); saveUserDefaults(); viewHome();
