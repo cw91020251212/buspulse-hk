@@ -647,14 +647,47 @@ async function openGetoffSetup(it) {
     routeStopsCache.set(uid(it), stops);
     sBody.innerHTML = '<div class="lbl">' + esc(it.route) + ' · ' + esc(it.dest || '') + '</div>' +
       '<div class="hint">揀你想落車嘅站。開始後，手機會用 GPS 判斷你接近目標站；GPS 只會喺你主動開始後使用。</div>' +
+      '<button class="wide" id="getoffMapBtn">🗺 地圖揀站</button>' +
+      '<div class="map-wrap" id="getoffMapWrap"><div class="route-map"></div><div class="map-note">撳地圖上任何圓圈，再撳「用呢個站」即可開始落車提醒。</div></div>' +
       '<div class="list">' + stops.map((st, i) => '<button class="li sm" data-getoff-stop="' + i + '"><span class="n">' + st.seq + '</span><span class="d">' + esc(st.name) + '</span><span class="a">' + (getoff[uid(it)]?.targetSeq === st.seq ? '✓' : '›') + '</span></button>').join('') + '</div>' +
       (getoff[uid(it)]?.active ? '<button class="wide" id="stopGetoff">停止落車提醒</button>' : '') +
       '<button class="wide" id="cancelGetoff">← 返回</button>';
     sBody.querySelectorAll('[data-getoff-stop]').forEach(b => b.addEventListener('click', () => startGetoff(it, stops[+b.dataset.getoffStop])));
+    $('#getoffMapBtn').addEventListener('click', () => showGetoffMap(it, stops, $('#getoffMapBtn')));
     if ($('#stopGetoff')) $('#stopGetoff').addEventListener('click', () => stopGetoff(it));
     $('#cancelGetoff').addEventListener('click', viewHome);
   } catch { sBody.innerHTML = '<div class="msg">讀取站頭失敗，請檢查網絡</div><button class="wide" id="cancelGetoff">← 返回</button>'; $('#cancelGetoff').addEventListener('click', viewHome); }
 }
+let getoffMapInstance = null;
+async function showGetoffMap(it, stops, button) {
+  const wrap = $('#getoffMapWrap');
+  if (!wrap) return;
+  const open = wrap.classList.toggle('open');
+  button.classList.toggle('open', open);
+  button.textContent = open ? '🗺 收起地圖' : '🗺 地圖揀站';
+  if (!open) return;
+  const mapEl = wrap.querySelector('.route-map');
+  if (mapEl.dataset.ready === '1') { setTimeout(() => getoffMapInstance && getoffMapInstance.invalidateSize(), 80); return; }
+  const valid = stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+  if (!valid.length) { mapEl.innerHTML = '<div class="map-loading">呢條路線暫時未有站頭座標資料</div>'; return; }
+  mapEl.innerHTML = '';
+  const map = L.map(mapEl, { zoomControl:false, attributionControl:true });
+  getoffMapInstance = map;
+  L.control.zoom({ position:'topright' }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap contributors' }).addTo(map);
+  const points = valid.map(x => [x.lat, x.lng]);
+  const road = await roadPath(valid);
+  L.polyline(road, { color:'#6c8cff', weight:5, opacity:.82 }).addTo(map);
+  valid.forEach(st => {
+    const marker=L.circleMarker([st.lat,st.lng], { radius:7, color:'#6c8cff', weight:2, fillColor:'#a9baff', fillOpacity:.95 });
+    marker.bindPopup('<b>第 '+st.seq+' 站</b><br>'+esc(st.name)+'<br><button class="popup-select getoff-select">用呢個站</button>');
+    marker.on('popupopen', e => { const b=e.popup.getElement().querySelector('.getoff-select'); if(b) b.addEventListener('click', () => startGetoff(it, st)); });
+    marker.addTo(map);
+  });
+  map.fitBounds(L.latLngBounds(points), { padding:[18,18], maxZoom:15 });
+  mapEl.dataset.ready='1';
+}
+
 function startGetoff(it, target) {
   const id = uid(it);
   if (!navigator.geolocation) { alert('此手機不支援 GPS 定位'); return; }
