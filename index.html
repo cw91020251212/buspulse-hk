@@ -714,15 +714,15 @@ function notifyArrival(it, min) {
         body,
         icon: './icon-192.png',
         badge: './icon-192.png',
-        tag: 'buspulse-' + uid(it),
-        renotify: true,
+        tag: 'buspulse-' + uid(it) + '-' + Date.now(),
+        renotify: false,
         vibrate: [260,100,260,100,260],
         requireInteraction: true,
         silent: false,
         data: { url: './' }
       });
     }).catch(() => {
-      try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) }); } catch {}
+      try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) + '-' + Date.now() }); } catch {}
     });
   }
 }
