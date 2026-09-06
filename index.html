@@ -557,6 +557,21 @@ function save() {
   try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
 }
 const uid = it => [it.co, it.route, it.dir || it.route_seq, it.stopId || it.seq].join('|');
+function closeArrivalNotifications() {
+  try { navigator.serviceWorker?.getRegistration().then(reg => reg?.getNotifications().then(ns => ns.filter(n => n.tag?.startsWith('buspulse-')).forEach(n => n.close()))); } catch {}
+}
+function cleanupOrphanAlarms() {
+  const valid = new Set(items.map(uid)); let changed = false;
+  Object.keys(alarms).forEach(id => { if (!valid.has(id)) { delete alarms[id]; alarmSeen.delete(id); changed = true; } });
+  if (changed) saveAlarms();
+  closeArrivalNotifications();
+}
+function clearAllArrivalAlarms() {
+  if (!confirm('確定要關閉所有路線嘅到站鬧鐘嗎？之後可以逐條重新開啟。')) return;
+  alarms = {}; alarmSeen.clear(); saveAlarms(); closeArrivalNotifications(); shell();
+  const n=document.querySelector('#alarmClearNote'); if(n) n.textContent='所有到站鬧鐘已關閉。';
+}
+cleanupOrphanAlarms();
 
 /* ===================================================================
    BOARD RENDER
@@ -1090,6 +1105,7 @@ function viewHome() {
   h += '<button class="wide p" id="addBtn">＋ 加新路線</button>';
   h += '<div class="lbl">其他</div>';
   h += '<div class="backup-box"><b>資料備份</b><br><span id="backupNote">' + backupReminder() + '</span><div class="backup-actions"><button class="wide" id="exportBtn">⬇ 下載備份</button><button class="wide" id="shareBtn">↗ 分享備份</button></div><button class="wide" id="importBtn">⬆ 還原備份</button><input type="file" id="backupFile" accept="application/json,.json" style="display:none"></div>';
+  h += '<div class="backup-box"><b>到站提醒管理</b><br><span id="alarmClearNote">刪除路線後，該路線嘅鬧鐘會自動清理。</span><button class="wide danger" id="clearAlarmsBtn">關閉所有到站鬧鐘</button></div>';
   h += '<button class="wide" id="installBtn" style="display:none">&#128241; 安裝到主畫面</button>';
   h += '<button class="wide" id="saveDefaultBtn">將目前路線儲存為預設</button>';
   h += '<button class="wide" id="loadDefaultBtn" ' + (userDefaults.length ? '' : 'disabled') + '>使用預設路線' + (userDefaults.length ? '（' + userDefaults.length + ' 條）' : '（尚未設定）') + '</button>';
@@ -1100,7 +1116,9 @@ function viewHome() {
   sBody.scrollTop = 0;
 
   sBody.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
-    items.splice(+b.dataset.del, 1); save(); shell(); refresh(); viewHome();
+    const removed = items[+b.dataset.del], id = removed && uid(removed);
+    items.splice(+b.dataset.del, 1); if (id) { delete alarms[id]; alarmSeen.delete(id); delete getoff[id]; saveAlarms(); saveGetoff(); }
+    save(); closeArrivalNotifications(); shell(); refresh(); viewHome();
   }));
   sBody.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => {
     const i = +b.dataset.up; if (i < 1) return;
@@ -1117,6 +1135,7 @@ function viewHome() {
   $('#shareBtn').addEventListener('click', shareBackup);
   $('#importBtn').addEventListener('click', chooseBackupFile);
   $('#backupFile').addEventListener('change', e => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; });
+  $('#clearAlarmsBtn').addEventListener('click', clearAllArrivalAlarms);
   $('#saveDefaultBtn').addEventListener('click', () => {
     if (!items.length) { alert('請先加入至少一條路線，先可以儲存為預設。'); return; }
     userDefaults = items.map(x => ({...x})); saveUserDefaults(); viewHome();
