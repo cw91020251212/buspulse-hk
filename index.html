@@ -839,6 +839,21 @@ async function requestNotifications() {
     if (Notification.permission === 'granted') await navigator.serviceWorker?.ready;
   } catch {}
 }
+function updateNotificationButton() {
+  const button = $('#notifyBtn');
+  if (!button) return;
+  if (!('Notification' in window)) { button.textContent = '此瀏覽器不支援通知'; button.disabled = true; return; }
+  if (Notification.permission === 'granted') {
+    button.textContent = '系統通知已允許 ✓';
+    button.disabled = true;
+  } else if (Notification.permission === 'denied') {
+    button.textContent = '通知已封鎖，請到瀏覽器設定開啟';
+    button.disabled = false;
+  } else {
+    button.textContent = '允許系統通知';
+    button.disabled = false;
+  }
+}
 async function sendTestNotification() {
   if (!('Notification' in window)) { alert('此瀏覽器不支援系統通知'); return false; }
   await requestNotifications();
@@ -1148,11 +1163,12 @@ function viewPrefs() {
     '<div class="pref-row"><div>顏色模式<small>可以選擇黑暗或光明版</small></div><select class="pref-select" id="themeSel"><option value="dark">黑暗模式</option><option value="light">光明模式</option></select></div>' +
     '<button class="wide" id="prefsBack">← 返回路線設定</button>';
   $('#leadSel').value = String(prefs.lead); $('#fontSel').value = prefs.font; $('#timeSel').value = String(prefs.time12); $('#themeSel').value = prefs.theme;
+  updateNotificationButton();
   $('#leadSel').addEventListener('change', e => { prefs.lead=+e.target.value; savePrefs(); });
   $('#fontSel').addEventListener('change', e => { prefs.font=e.target.value; savePrefs(); applyPrefs(); });
   $('#timeSel').addEventListener('change', e => { prefs.time12=e.target.value === 'true'; savePrefs(); });
   $('#themeSel').addEventListener('change', e => { prefs.theme=e.target.value; savePrefs(); applyPrefs(); });
-  $('#notifyBtn').addEventListener('click', async e => { await requestNotifications(); e.currentTarget.textContent = ('Notification' in window && Notification.permission === 'granted') ? '系統通知已允許' : '未能允許系統通知'; });
+  $('#notifyBtn').addEventListener('click', async () => { await requestNotifications(); updateNotificationButton(); });
   $('#testNotifyBtn').addEventListener('click', () => scheduleTestNotification(Number($('#testDelaySel').value)));
   $('#miniBtn').addEventListener('click', e => openMiniWindow(e.currentTarget));
   $('#prefsBack').addEventListener('click', viewHome);
