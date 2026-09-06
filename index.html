@@ -71,7 +71,7 @@ body{
   padding:0 13px 9px 15px; font-size:11.5px; color:var(--faint);
   display:flex; align-items:center; gap:5px;
 }
-.stop b{color:var(--dim); font-weight:600}.fare{margin-left:auto;color:#ffd166;font-size:10.5px;font-weight:800;white-space:nowrap;background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.2);padding:3px 6px;border-radius:6px}
+.stop b{color:var(--dim); font-weight:600}.fare{margin-left:auto;color:#ffd166;font-size:10.5px;font-weight:800;white-space:nowrap;background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.2);padding:3px 6px;border-radius:6px}.fare-link{color:#a9c7ff;text-decoration:none;border-color:rgba(169,199,255,.35);cursor:pointer}.fare-link:hover{text-decoration:underline}
 /* ---------- eta row ---------- */
 .etas{display:flex; gap:7px; padding:0 13px 12px 15px; overflow-x:auto; scrollbar-width:none}
 .etas::-webkit-scrollbar{display:none}
@@ -521,7 +521,20 @@ async function updateFares() {
       : it.co === 'CTB' ? ['CTB', 'KMB+CTB', 'LWB+CTB'] : [it.co];
     const fare = companies.map(co => Number(fares[co + '|' + route + '|' + routeSeq]))
       .find(value => Number.isFinite(value));
-    el.textContent = Number.isFinite(fare) ? '車資 $' + fare.toFixed(1) : '車資 —';
+    if (Number.isFinite(fare)) {
+      el.textContent = '全程 $' + fare.toFixed(1);
+      el.removeAttribute('href');
+      el.removeAttribute('target');
+      el.classList.remove('fare-link');
+    } else {
+      el.textContent = '全程車資：查詢';
+      const routeUrl = it.co === 'KMB'
+        ? 'https://search.kmb.hk/KMBWebSite/?action=routesearch&route=' + encodeURIComponent(route) + '&lang=zh-hk'
+        : it.co === 'CTB'
+        ? 'https://www.citybus.com.hk/routesearch/'
+        : '';
+      if (routeUrl) { el.href = routeUrl; el.target = '_blank'; el.rel = 'noopener'; el.classList.add('fare-link'); }
+    }
   });
 }
 
@@ -543,7 +556,7 @@ function shell() {
       '<button class="alarm-btn ' + (alarms[uid(it)] ? 'on' : '') + '" data-alarm-id="' + id + '" title="開關到站提醒" aria-label="開關到站提醒">🔔</button>' +
       '<button class="map-head-btn" data-map-id="' + id + '" title="查看路線地圖" aria-label="查看路線地圖">⌖</button>' +
       '</div>' +
-      '<div class="stop">&#128205; <b>' + esc(it.stopName || '') + '</b><span class="fare" data-fare="' + id + '">車資 —</span></div>' +
+      '<div class="stop">&#128205; <b>' + esc(it.stopName || '') + '</b><a class="fare" data-fare="' + id + '" title="官方全程車資">全程車資：讀取中</a></div>' +
       '<div class="etas" data-slot="' + id + '">' +
         '<div class="eta"><div class="m pulse">··</div><div class="u">載入中</div></div>' +
       '</div>' +
