@@ -707,9 +707,23 @@ function notifyArrival(it, min) {
   const card = board.querySelector('[data-id="' + cssEscape(uid(it)) + '"]');
   if (card) { card.classList.remove('alert-flash'); void card.offsetWidth; card.classList.add('alert-flash'); setTimeout(() => card.classList.remove('alert-flash'), 12000); }
   if ('Notification' in window && Notification.permission === 'granted') {
-    // Keep one notification path only. A Service Worker notification with the
-    // same tag can replace this one and suppress the audible alert on mobile.
-    try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it), renotify: true }); } catch {}
+    // Use the service worker as the single system-notification path. This is
+    // the path that keeps the badge/system notification alive in background.
+    navigator.serviceWorker?.ready.then(reg => {
+      reg.showNotification('巴士就嚟到站', {
+        body,
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'buspulse-' + uid(it),
+        renotify: true,
+        vibrate: [260,100,260,100,260],
+        requireInteraction: true,
+        silent: false,
+        data: { url: './' }
+      });
+    }).catch(() => {
+      try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) }); } catch {}
+    });
   }
 }
 function checkAlarms(it, res) {
