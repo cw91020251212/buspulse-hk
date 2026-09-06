@@ -94,7 +94,7 @@ body{
 @keyframes pl{0%,100%{opacity:1}50%{opacity:.45}}
 .alert-flash{animation:alertFlash .9s ease-in-out 12;border-color:#ffd166!important;box-shadow:0 0 0 3px rgba(255,209,102,.22),0 0 28px rgba(255,209,102,.35)!important}
 @keyframes alertFlash{0%,100%{transform:scale(1)}50%{transform:scale(1.015);filter:brightness(1.3)}}
-.alarm-btn,.alight-btn{border:1px solid rgba(133,169,255,.28);background:rgba(108,140,255,.1);color:#b9c9ff;border-radius:8px;height:28px;padding:0 7px;font:700 16px/1 inherit;cursor:pointer;flex:none;position:relative}.alarm-btn:not(.on){color:#e5ecf7;background:rgba(220,230,245,.08);border-color:rgba(220,230,245,.4);filter:grayscale(1) brightness(1.45)}.alarm-btn:not(.on)::after{content:"";position:absolute;left:5px;right:5px;top:13px;height:2px;border-radius:2px;background:#e5ecf7;transform:rotate(-43deg)}.alarm-btn.on{background:rgba(255,209,102,.18);border-color:rgba(255,209,102,.55);color:#ffd166;filter:none}.alight-btn{font-size:11px;color:#a7f1bf;border-color:rgba(99,216,137,.3);background:rgba(99,216,137,.1)}
+.getoff-btn{border:1px solid rgba(99,216,137,.32);background:rgba(99,216,137,.08);color:#a7f1bf;border-radius:8px;height:28px;padding:0 7px;font:700 11px/1 inherit;cursor:pointer;flex:none}.getoff-btn.on{background:rgba(99,216,137,.2);border-color:rgba(99,216,137,.65);color:#70f09b}.alarm-btn,.alight-btn{border:1px solid rgba(133,169,255,.28);background:rgba(108,140,255,.1);color:#b9c9ff;border-radius:8px;height:28px;padding:0 7px;font:700 16px/1 inherit;cursor:pointer;flex:none;position:relative}.alarm-btn:not(.on){color:#e5ecf7;background:rgba(220,230,245,.08);border-color:rgba(220,230,245,.4);filter:grayscale(1) brightness(1.45)}.alarm-btn:not(.on)::after{content:"";position:absolute;left:5px;right:5px;top:13px;height:2px;border-radius:2px;background:#e5ecf7;transform:rotate(-43deg)}.alarm-btn.on{background:rgba(255,209,102,.18);border-color:rgba(255,209,102,.55);color:#ffd166;filter:none}.alight-btn{font-size:11px;color:#a7f1bf;border-color:rgba(99,216,137,.3);background:rgba(99,216,137,.1)}
 .pref-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:7px;font-size:12.5px}.pref-row small{display:block;color:var(--faint);font-size:10px;margin-top:3px}.pref-select{background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:7px 8px;font:600 12px inherit}.toggle{width:44px;height:25px;border-radius:15px;border:1px solid var(--line);background:#3a465a;position:relative;cursor:pointer}.toggle::after{content:"";position:absolute;width:19px;height:19px;top:2px;left:2px;border-radius:50%;background:#cbd5e1;transition:.18s}.toggle.on{background:var(--now)}.toggle.on::after{left:21px;background:#071a14}
 body.font-large .card{font-size:17px}body.font-large .rt{font-size:29px}body.font-large .dest{font-size:14px}body.font-large .stop{font-size:13.5px}body.font-large .stop b{font-size:14px}body.font-large .fare{font-size:12px}body.font-large .eta .m{font-size:25px}body.font-large .eta .u,body.font-large .eta .t{font-size:11px}body.font-large .rmk,body.font-large .none{font-size:12.5px}body.font-large .map-head-btn,body.font-large .alarm-btn{transform:scale(1.08)}body.font-large .foot{font-size:12px}body.font-large .sbody{font-size:15px}body.font-large .sbody .lbl{font-size:12px}body.font-large .sbody .hint{font-size:12.5px}body.font-large .sbody .li .n{font-size:18px}body.font-large .sbody .li .d{font-size:13.5px}body.font-large .sbody .sv .n{font-size:16.5px}body.font-large .sbody .sv .d{font-size:13px}body.font-large .sbody .wide{font-size:15px}body.font-large .sbody .pref-row{font-size:14.5px}body.font-large .sbody .pref-row small{font-size:11.5px}body.font-large .sbody .pref-select{font-size:14px}
 body.font-large .clock{font-size:15px}body.font-large .brandcopy small{font-size:10.5px}body.font-large .iconbtn{font-size:17px}
@@ -452,6 +452,11 @@ async function fetchETA(it) {
 const KEY = 'busboard.items.v1';
 const PREF_KEY = 'busboard.preferences.v1';
 const ALARM_KEY = 'busboard.alarms.v1';
+const GETOFF_KEY = 'busboard.getoff.v1';
+let getoff = loadGetoff();
+let getoffWatch = null;
+function loadGetoff() { try { return JSON.parse(localStorage.getItem(GETOFF_KEY) || '{}') || {}; } catch { return {}; } }
+function saveGetoff() { try { localStorage.setItem(GETOFF_KEY, JSON.stringify(getoff)); } catch {} }
 let prefs = loadPrefs();
 let alarms = loadAlarms();
 const alarmSeen = new Map();
@@ -501,6 +506,7 @@ let lastOK = 0, inFlight = false;
 const latestResults = new Map();
 let pipWindow = null;
 const mapCache = new Map();
+const routeStopsCache = new Map();
 const fareMemo = new Map();
 async function fareData() {
   if (!fareMemo.has('all')) fareMemo.set('all', getJSON('./fare-index.json', 12000).catch(() => ({})));
@@ -553,6 +559,7 @@ function shell() {
         '<span class="rt">' + esc(it.route) + '</span>' +
         '<span class="co ' + it.co + '">' + CO_NAME[it.co] + '</span>' +
         '<span class="dest">往 ' + esc(it.dest || '') + '</span>' +
+      '<button class="getoff-btn ' + (getoff[uid(it)]?.active ? 'on' : '') + '" data-getoff-id="' + id + '" title="設定落車提醒">' + (getoff[uid(it)]?.active ? '落車中' : '落車') + '</button>' +
       '<button class="alarm-btn ' + (alarms[uid(it)] ? 'on' : '') + '" data-alarm-id="' + id + '" title="開關到站提醒" aria-label="開關到站提醒">🔔</button>' +
       '<button class="map-head-btn" data-map-id="' + id + '" title="查看路線地圖" aria-label="查看路線地圖">⌖</button>' +
       '</div>' +
@@ -563,6 +570,11 @@ function shell() {
       '<div class="map-wrap" data-map-wrap="' + id + '"><div class="map-tools"><button class="locate-btn" data-locate-id="' + id + '">⌖ 定位我附近</button></div><div class="route-map"></div></div>' +
     '</div>';
   }).join('');
+  board.querySelectorAll('[data-getoff-id]').forEach(button => {
+    const id = button.dataset.getoffId;
+    const item = items.find(x => uid(x) === id);
+    if (item) button.addEventListener('click', () => openGetoffSetup(item));
+  });
   board.querySelectorAll('[data-alarm-id]').forEach(button => {
     const id = button.dataset.alarmId;
     button.addEventListener('click', () => toggleAlarm(id, button));
@@ -626,6 +638,51 @@ function checkAlarms(it, res) {
   alarmSeen.set(uid(it), key);
   notifyArrival(it, eta.min);
 }
+async function openGetoffSetup(it) {
+  openSheet();
+  sTitle.textContent = '設定落車提醒';
+  sBody.innerHTML = '<div class="msg"><span class="spin"></span>載入 ' + esc(it.route) + ' 站頭 …</div>';
+  try {
+    const stops = await routeStops(it);
+    routeStopsCache.set(uid(it), stops);
+    sBody.innerHTML = '<div class="lbl">' + esc(it.route) + ' · ' + esc(it.dest || '') + '</div>' +
+      '<div class="hint">揀你想落車嘅站。開始後，手機會用 GPS 判斷你接近目標站；GPS 只會喺你主動開始後使用。</div>' +
+      '<div class="list">' + stops.map((st, i) => '<button class="li sm" data-getoff-stop="' + i + '"><span class="n">' + st.seq + '</span><span class="d">' + esc(st.name) + '</span><span class="a">' + (getoff[uid(it)]?.targetSeq === st.seq ? '✓' : '›') + '</span></button>').join('') + '</div>' +
+      (getoff[uid(it)]?.active ? '<button class="wide" id="stopGetoff">停止落車提醒</button>' : '') +
+      '<button class="wide" id="cancelGetoff">← 返回</button>';
+    sBody.querySelectorAll('[data-getoff-stop]').forEach(b => b.addEventListener('click', () => startGetoff(it, stops[+b.dataset.getoffStop])));
+    if ($('#stopGetoff')) $('#stopGetoff').addEventListener('click', () => stopGetoff(it));
+    $('#cancelGetoff').addEventListener('click', viewHome);
+  } catch { sBody.innerHTML = '<div class="msg">讀取站頭失敗，請檢查網絡</div><button class="wide" id="cancelGetoff">← 返回</button>'; $('#cancelGetoff').addEventListener('click', viewHome); }
+}
+function startGetoff(it, target) {
+  const id = uid(it);
+  if (!navigator.geolocation) { alert('此手機不支援 GPS 定位'); return; }
+  const begin = () => {
+    getoff[id] = { active:true, route:it.route, targetSeq:target.seq, targetName:target.name, targetLat:target.lat, targetLng:target.lng };
+    saveGetoff();
+    if (getoffWatch != null) navigator.geolocation.clearWatch(getoffWatch);
+    getoffWatch = navigator.geolocation.watchPosition(pos => updateGetoff(it, pos.coords), () => { notifyGetoffError(); }, { enableHighAccuracy:true, maximumAge:15000, timeout:20000 });
+    viewHome(); shell(); refresh();
+  };
+  if (target.lat == null || target.lng == null) { alert('呢個站暫時冇 GPS 座標，請揀另一個站'); return; }
+  begin();
+}
+function stopGetoff(it) { delete getoff[uid(it)]; saveGetoff(); if (getoffWatch != null) { navigator.geolocation.clearWatch(getoffWatch); getoffWatch=null; } viewHome(); shell(); }
+function notifyGetoffError() { const n=document.querySelector('#getoffNote'); if(n) n.textContent='GPS 暫時未能定位，請確認已允許定位及開啟手機 GPS。'; }
+function updateGetoff(it, coords) {
+  const state=getoff[uid(it)]; if (!state?.active) return;
+  const d=routeStopsCache.get(uid(it));
+  if (!d?.length) return;
+  const here={lat:coords.latitude,lng:coords.longitude};
+  let nearest=d[0], best=Infinity;
+  d.forEach(st => { if (st.lat == null || st.lng == null) return; const x=(st.lat-here.lat)*111000, y=(st.lng-here.lng)*111000*Math.cos(here.lat*Math.PI/180), dist=x*x+y*y; if(dist<best){best=dist;nearest=st;} });
+  const before=Math.max(0,state.targetSeq-nearest.seq);
+  const note=document.querySelector('#getoffNote'); if(note) note.textContent=nearest.seq >= state.targetSeq ? '已接近／到達目標站：' + state.targetName : '目前接近第 ' + nearest.seq + ' 站，距離目標約 ' + before + ' 個站';
+  const key=state.targetSeq + ':' + nearest.seq;
+  if (before <= 1 && nearest.seq < state.targetSeq && state.alertKey !== key) { state.alertKey=key; saveGetoff(); ringBell(); if(navigator.vibrate) navigator.vibrate([300,120,300,120,500]); const card=board.querySelector('[data-id="'+cssEscape(uid(it))+'"]'); if(card){card.classList.remove('alert-flash');void card.offsetWidth;card.classList.add('alert-flash');setTimeout(()=>card.classList.remove('alert-flash'),12000);} if('Notification' in window && Notification.permission==='granted') navigator.serviceWorker?.ready.then(reg=>reg.showNotification('就嚟落車喇',{body:it.route+' 下一個站：'+state.targetName,icon:'./icon-192.png',tag:'getoff-'+uid(it),requireInteraction:true})).catch(()=>{}); }
+}
+
 function renderPip() {
   if (!pipWindow || pipWindow.closed) return;
   const root = pipWindow.document.querySelector('#pipRoot');
@@ -893,6 +950,7 @@ function viewHome() {
   h += '<div class="lbl">其他</div>';
   h += '<button class="wide" id="installBtn" style="display:none">&#128241; 安裝到主畫面</button>';
   h += '<button class="wide" id="resetBtn">回復預設路線</button>';
+  h += '<div class="hint" id="getoffNote">落車提醒只會喺你主動揀站及允許 GPS 後啟動。</div>';
   h += '<div class="hint">設定會存喺呢部機嘅瀏覽器，下次開返一樣。</div>';
   sBody.innerHTML = h;
   sBody.scrollTop = 0;
@@ -995,6 +1053,7 @@ async function viewStops(v) {
     return;
   }
   setupMapInstance = null;
+  routeStopsCache.set(uid({co:v.co, route:v.route, dir:v.dir, stopId:'__setup__'}), stops);
   sBody.innerHTML =
     '<div class="lbl">' + esc(v.dirLabel) + '</div>' +
     '<div class="map-actions" style="padding:0 0 10px"><button class="map-toggle" id="setupMapBtn"><span>🗺 先睇全條路線地圖</span><span class="map-arrow">⌄</span></button></div>' +
