@@ -79,7 +79,7 @@ body{
   background:linear-gradient(145deg,rgba(39,54,82,.9),rgba(29,42,66,.9)); border:1px solid var(--line); border-radius:10px;
   padding:7px 11px; min-width:66px; flex:none; text-align:center;
 }
-.eta .m{font-size:21px; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums}
+.eta-main{display:flex;align-items:baseline;justify-content:center;gap:3px;min-height:22px;white-space:nowrap}.eta .m{font-size:21px; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums}
 .eta .u{font-size:9.5px; color:var(--faint); font-weight:600}
 .eta .t{font-size:9.5px; color:var(--faint); margin-top:2px; font-variant-numeric:tabular-nums}
 .eta.i0{border-color:rgba(0,229,138,.4); background:rgba(0,229,138,.08)}
@@ -787,8 +787,8 @@ function paint(it, res) {
     const cls = ['eta', 'i' + Math.min(i, 2)];
     if (e.sched) cls.push('sch');
     let big;
-    if (e.min <= 0) { cls.push('arr'); big = '<div class="m">即將到達</div><div class="u">&nbsp;</div>'; }
-    else            { big = '<div class="m">' + e.min + '</div><div class="u">分鐘</div>'; }
+    if (e.min <= 0) { cls.push('arr'); big = '<div class="eta-main"><div class="m">即將到達</div></div>'; }
+    else            { big = '<div class="eta-main"><div class="m">' + e.min + '</div><div class="u">分鐘</div></div>'; }
     return '<div class="' + cls.join(' ') + '">' + big +
            '<div class="t">' + hhmm + '</div></div>';
   }).join('');
