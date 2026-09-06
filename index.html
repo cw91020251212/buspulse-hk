@@ -678,7 +678,21 @@ function toggleAlarm(id, button) {
   if (alarms[id]) { unlockAudio(); button.title = '關閉到站提醒'; } else button.title = '開關到站提醒';
 }
 let audioCtx = null;
-function unlockAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch {} }
+let alarmAudio = null;
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    if (!alarmAudio) {
+      alarmAudio = new Audio();
+      alarmAudio.preload = 'auto';
+      alarmAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=';
+      alarmAudio.volume = 0;
+    }
+    const p = alarmAudio.play();
+    if (p) p.then(() => { alarmAudio.pause(); alarmAudio.currentTime = 0; }).catch(() => {});
+  } catch {}
+}
 function ringBell() {
   try {
     unlockAudio();
@@ -693,20 +707,12 @@ function notifyArrival(it, min) {
   const card = board.querySelector('[data-id="' + cssEscape(uid(it)) + '"]');
   if (card) { card.classList.remove('alert-flash'); void card.offsetWidth; card.classList.add('alert-flash'); setTimeout(() => card.classList.remove('alert-flash'), 12000); }
   if ('Notification' in window && Notification.permission === 'granted') {
-    navigator.serviceWorker?.ready.then(reg => {
-      reg.showNotification('巴士就嚟到站', {
-        body,
-        icon: './icon-192.png',
-        badge: './icon-192.png',
-        tag: 'buspulse-' + uid(it),
-        renotify: true,
-        vibrate: [260,100,260,100,260],
-        requireInteraction: true,
-        data: { url: './' }
-      });
-    }).catch(() => {
-      try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) }); } catch {}
-    });
+    try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it), renotify: true }); } catch {}
+    navigator.serviceWorker?.ready.then(reg => reg.showNotification('巴士就嚟到站', {
+      body, icon: './icon-192.png', badge: './icon-192.png', tag: 'buspulse-' + uid(it),
+      renotify: true, silent: false, vibrate: [260,100,260,100,260], requireInteraction: true,
+      data: { url: './' }
+    })).catch(() => {});
   }
 }
 function checkAlarms(it, res) {
@@ -1064,9 +1070,9 @@ function startLoop() {
 function stopLoop() { if (timer) { clearInterval(timer); timer = null; } }
 
 document.addEventListener('visibilitychange', () => {
-  // 不要因為切去音樂／聊天 App 就停止提醒；回到前景時立即補一次更新。
-  if (!document.hidden) refresh();
+  if (!document.hidden) { unlockAudio(); refresh(); }
 });
+window.addEventListener('pageshow', () => { if (!document.hidden) refresh(); });
 $('#refreshBtn').addEventListener('click', () => { refresh(); });
 /* ===================================================================
    SETTINGS SHEET

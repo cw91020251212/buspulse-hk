@@ -52,6 +52,7 @@ self.addEventListener('message', e => {
     renotify: true,
     vibrate: [260, 100, 260, 100, 260],
     requireInteraction: true,
+    silent: false,
     data: { url: './' }
   };
   e.waitUntil(self.registration.showNotification(title, options));
