@@ -104,7 +104,7 @@ body.light{--bg:#eef3fa;--bg-deep:#e1e9f4;--card:rgba(255,255,255,.92);--card2:#
 .map-toggle:active{transform:scale(.99);background:rgba(108,140,255,.18)}
 .map-toggle .map-arrow{font-size:15px;line-height:1;transition:transform .2s ease}.map-toggle.open .map-arrow{transform:rotate(180deg)}
 .map-wrap{display:none;margin:0 13px 12px 15px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#dbe7ef}
-.map-wrap.open{display:block}.map-tools{display:flex;gap:7px;padding:8px;background:rgba(16,24,39,.95)}.locate-btn{border:1px solid rgba(99,216,137,.35);background:rgba(99,216,137,.12);color:#a7f1bf;border-radius:9px;padding:8px 10px;font:700 11px inherit;cursor:pointer}.locate-btn:active{transform:scale(.98)}.route-map{height:250px;width:100%;z-index:1}.map-note{padding:7px 10px;background:rgba(16,24,39,.94);color:var(--faint);font-size:10px;line-height:1.4}
+.map-wrap.open{display:block}.map-tools{display:flex;gap:7px;padding:8px;background:rgba(16,24,39,.95)}.locate-btn{border:1px solid rgba(99,216,137,.35);background:rgba(99,216,137,.12);color:#a7f1bf;border-radius:9px;padding:8px 10px;font:700 11px inherit;cursor:pointer}.locate-btn:active{transform:scale(.98)}.route-map{height:250px;width:100%;z-index:1}.map-live-note{padding:7px 10px;background:rgba(0,229,138,.08);color:#a7f1bf;font-size:10.5px;line-height:1.45;border-top:1px solid rgba(99,216,137,.2)}.map-note{padding:7px 10px;background:rgba(16,24,39,.94);color:var(--faint);font-size:10px;line-height:1.4}
 .map-loading{height:250px;display:grid;place-items:center;color:#53657e;font-size:12px}
 .leaflet-container{font-family:inherit}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#17233a;color:#f4f7fb}.leaflet-popup-content{font-size:12px;line-height:1.5}.leaflet-control-zoom a{color:#23344e}.popup-select{margin-top:5px;border:0;border-radius:7px;padding:6px 9px;background:var(--now);color:#071a14;font:700 11px inherit;cursor:pointer}
 .rmk{
@@ -507,6 +507,7 @@ const latestResults = new Map();
 let pipWindow = null;
 const mapCache = new Map();
 const routeStopsCache = new Map();
+const liveMapStates = new Map();
 const fareMemo = new Map();
 async function fareData() {
   if (!fareMemo.has('all')) fareMemo.set('all', getJSON('./fare-index.json', 12000).catch(() => ({})));
@@ -567,7 +568,7 @@ function shell() {
       '<div class="etas" data-slot="' + id + '">' +
         '<div class="eta"><div class="m pulse">··</div><div class="u">載入中</div></div>' +
       '</div>' +
-      '<div class="map-wrap" data-map-wrap="' + id + '"><div class="map-tools"><button class="locate-btn" data-locate-id="' + id + '">⌖ 定位我附近</button></div><div class="route-map"></div></div>' +
+      '<div class="map-wrap" data-map-wrap="' + id + '"><div class="map-tools"><button class="locate-btn" data-locate-id="' + id + '">⌖ 開啟 GPS</button></div><div class="route-map"></div></div>' +
     '</div>';
   }).join('');
   board.querySelectorAll('[data-getoff-id]').forEach(button => {
@@ -584,10 +585,6 @@ function shell() {
     if (item) button.addEventListener('click', () => toggleMap(item, button));
   });
   updateFares().catch(() => {});
-  board.querySelectorAll('[data-locate-id]').forEach(button => {
-    const item = items.find(x => uid(x) === button.dataset.locateId);
-    if (item) button.addEventListener('click', () => locateOnExistingMap(item));
-  });
 }
 
 function toggleAlarm(id, button) {
@@ -790,7 +787,10 @@ async function toggleMap(it, button) {
       marker.addTo(map);
     });
     map.fitBounds(L.latLngBounds(points), { padding: [18, 18], maxZoom: 15 });
-    const note = document.createElement('div'); note.className = 'map-note'; note.textContent = '紅色標記係你揀嘅站頭；藍線按道路網絡模擬，實際巴士行車路線或會因交通安排不同。'; wrap.appendChild(note);
+    const note = document.createElement('div'); note.className = 'map-note'; note.textContent = '撳「開啟 GPS」可持續顯示你嘅位置、最近站及下一站；地圖唔會自動彈出。'; wrap.appendChild(note);
+    const liveNote = document.createElement('div'); liveNote.className = 'map-live-note'; liveNote.dataset.liveNote = id; liveNote.textContent = '需要時先撳上面「開啟 GPS」，定位權限只會喺你主動撳掣後詢問。'; wrap.appendChild(liveNote);
+    const locateBtn = wrap.querySelector('[data-locate-id="' + cssEscape(id) + '"]');
+    if (locateBtn) locateBtn.addEventListener('click', () => toggleLiveRouteGPS(it, map, stops, locateBtn));
     mapCache.set(id, map);
   } catch { mapEl.innerHTML = '<div class="map-loading">暫時未有站頭座標資料</div>'; }
 }
@@ -846,6 +846,34 @@ function locateOnMap(map, stops, button) {
     if (near) map.eachLayer(layer => { if (layer.getLatLng && Math.abs(layer.getLatLng().lat-near.lat)<1e-8 && Math.abs(layer.getLatLng().lng-near.lng)<1e-8) layer.openPopup(); });
     button.textContent = '⌖ 已定位到附近';
   }, () => { button.textContent = '⌖ 定位失敗，請允許 GPS'; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+}
+
+function toggleLiveRouteGPS(it, map, stops, button) {
+  const id = uid(it);
+  const current = liveMapStates.get(id);
+  if (current?.watch != null) {
+    navigator.geolocation.clearWatch(current.watch); current.watch = null; liveMapStates.set(id, current);
+    button.textContent = '⌖ 開啟 GPS';
+    const note = document.querySelector('[data-live-note="' + cssEscape(id) + '"]'); if (note) note.textContent = 'GPS 已停止；需要時可以再次撳「開啟 GPS」。';
+    return;
+  }
+  if (!navigator.geolocation) { button.textContent = '此手機不支援 GPS'; return; }
+  button.textContent = '⌖ 定位中…';
+  const state = current || { marker:null, centered:false, watch:null };
+  const valid = stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+  state.watch = navigator.geolocation.watchPosition(pos => {
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+    if (!state.marker) state.marker=L.circleMarker([lat,lng], { radius:8, color:'#fff', weight:3, fillColor:'#ff625c', fillOpacity:.95 }).addTo(map);
+    else state.marker.setLatLng([lat,lng]);
+    if (!state.centered) { map.setView([lat,lng], 17); state.centered=true; }
+    const near=nearestStop(valid,lat,lng);
+    const idx=near ? valid.findIndex(x => x.seq === near.seq) : -1;
+    const next=idx >= 0 ? valid[idx+1] : null;
+    const note=document.querySelector('[data-live-note="' + cssEscape(id) + '"]');
+    if (note) note.textContent = near ? ('你目前接近：第 ' + near.seq + ' 站「' + near.name + '」' + (next ? '｜下一站：第 ' + next.seq + ' 站「' + next.name + '」' : '｜已接近尾站')) : 'GPS 已開啟，正在尋找路線附近站頭…';
+    button.textContent='⌖ GPS 已開啟';
+  }, () => { button.textContent='⌖ GPS 失敗，請允許定位'; }, { enableHighAccuracy:true, maximumAge:10000, timeout:20000 });
+  liveMapStates.set(id,state);
 }
 
 function locateOnExistingMap(it) {
