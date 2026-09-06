@@ -776,12 +776,12 @@ function startGetoff(it, target) {
     saveGetoff();
     if (getoffWatch != null) navigator.geolocation.clearWatch(getoffWatch);
     getoffWatch = navigator.geolocation.watchPosition(pos => updateGetoff(it, pos.coords), () => { notifyGetoffError(); }, { enableHighAccuracy:true, maximumAge:15000, timeout:20000 });
-    viewHome(); shell(); refresh();
+    closeSheet(); shell(); refresh();
   };
   if (target.lat == null || target.lng == null) { alert('呢個站暫時冇 GPS 座標，請揀另一個站'); return; }
   begin();
 }
-function stopGetoff(it) { delete getoff[uid(it)]; saveGetoff(); if (getoffWatch != null) { navigator.geolocation.clearWatch(getoffWatch); getoffWatch=null; } viewHome(); shell(); }
+function stopGetoff(it) { delete getoff[uid(it)]; saveGetoff(); if (getoffWatch != null) { navigator.geolocation.clearWatch(getoffWatch); getoffWatch=null; } closeSheet(); shell(); }
 function notifyGetoffError() { const n=document.querySelector('#getoffNote'); if(n) n.textContent='GPS 暫時未能定位，請確認已允許定位及開啟手機 GPS。'; }
 function updateGetoff(it, coords) {
   const state=getoff[uid(it)]; if (!state?.active) return;
