@@ -195,6 +195,7 @@ input.tin::placeholder{color:#4b5566;font-weight:400;letter-spacing:0}
   padding:12px; border-radius:11px; font-size:13.5px; font-weight:700;
   cursor:pointer; font-family:inherit; margin-top:9px;
 }
+.wide.danger{color:#ffaaa5;border-color:rgba(255,98,92,.3);background:rgba(255,98,92,.06)}
 .wide.p{background:linear-gradient(135deg,var(--now),#8af0c5);color:#071a14;border-color:var(--now); box-shadow:0 7px 18px rgba(54,224,160,.18)}
 .tag{
   display:inline-block; font-size:9.5px; font-weight:800; padding:2px 5px;
@@ -450,6 +451,7 @@ async function fetchETA(it) {
    STATE + STORAGE
    =================================================================== */
 const KEY = 'busboard.items.v1';
+const DEFAULTS_KEY = 'busboard.user-defaults.v1';
 const PREF_KEY = 'busboard.preferences.v1';
 const ALARM_KEY = 'busboard.alarms.v1';
 const GETOFF_KEY = 'busboard.getoff.v1';
@@ -481,13 +483,21 @@ const DEFAULTS = [
 ];
 
 let items = load();
+let userDefaults = loadUserDefaults();
+
+function loadUserDefaults() {
+  try { const a = JSON.parse(localStorage.getItem(DEFAULTS_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function saveUserDefaults() {
+  try { localStorage.setItem(DEFAULTS_KEY, JSON.stringify(userDefaults)); } catch {}
+}
 
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) return a; }
   } catch {}
-  return DEFAULTS.slice();
+  return userDefaults.length ? userDefaults.slice() : [];
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
@@ -1022,7 +1032,9 @@ function viewHome() {
   h += '<button class="wide p" id="addBtn">＋ 加新路線</button>';
   h += '<div class="lbl">其他</div>';
   h += '<button class="wide" id="installBtn" style="display:none">&#128241; 安裝到主畫面</button>';
-  h += '<button class="wide" id="resetBtn">回復預設路線</button>';
+  h += '<button class="wide" id="saveDefaultBtn">將目前路線儲存為預設</button>';
+  h += '<button class="wide" id="loadDefaultBtn" ' + (userDefaults.length ? '' : 'disabled') + '>使用預設路線' + (userDefaults.length ? '（' + userDefaults.length + ' 條）' : '（尚未設定）') + '</button>';
+  h += '<button class="wide danger" id="clearDefaultBtn" ' + (userDefaults.length ? '' : 'disabled') + '>清除預設路線</button>';
   h += '<div class="hint" id="getoffNote">落車提醒只會喺你主動揀站及允許 GPS 後啟動。</div>';
   h += '<div class="hint">設定會存喺呢部機嘅瀏覽器，下次開返一樣。</div>';
   sBody.innerHTML = h;
@@ -1042,8 +1054,19 @@ function viewHome() {
     save(); shell(); refresh(); viewHome();
   }));
   $('#addBtn').addEventListener('click', viewSearch);
-  $('#resetBtn').addEventListener('click', () => {
-    items = DEFAULTS.slice(); save(); shell(); refresh(); viewHome();
+  $('#saveDefaultBtn').addEventListener('click', () => {
+    if (!items.length) { alert('請先加入至少一條路線，先可以儲存為預設。'); return; }
+    userDefaults = items.map(x => ({...x})); saveUserDefaults(); viewHome();
+  });
+  $('#loadDefaultBtn').addEventListener('click', () => {
+    if (!userDefaults.length) return;
+    if (!confirm('確定要使用預設路線嗎？目前畫面上嘅路線會被預設清單取代，但唔會刪除你已儲存嘅預設。')) return;
+    items = userDefaults.map(x => ({...x})); save(); shell(); refresh(); viewHome();
+  });
+  $('#clearDefaultBtn').addEventListener('click', () => {
+    if (!userDefaults.length) return;
+    if (!confirm('確定要清除自訂預設路線嗎？目前路線唔會受影響。')) return;
+    userDefaults = []; saveUserDefaults(); viewHome();
   });
   if (deferredPrompt) {
     const ib = $('#installBtn');
