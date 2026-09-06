@@ -1,6 +1,7 @@
 /* BusPulse HK — service worker
-   只 cache app shell；到站數據永遠走網絡，絕不 cache。 */
-const SHELL = 'buspulse-hk-shell-v3';
+   只 cache app shell（HTML/manifest/icon），令離線都開得到個框。
+   到站數據永遠走網絡，絕不 cache（cache 咗就會顯示過期時間）。 */
+const SHELL = 'buspulse-hk-shell-v2';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -25,7 +26,7 @@ self.addEventListener('fetch', e => {
   // 所有 API 呼叫：純網絡，唔碰 cache
   if (url.hostname.endsWith('gov.hk')) return;
 
-  // 同源 shell：network-first，失敗才用 cache
+  // 同源 shell：network-first，失敗才用 cache（保證改動即時見到）
   if (url.origin === self.location.origin) {
     e.respondWith(
       fetch(req)
@@ -37,34 +38,4 @@ self.addEventListener('fetch', e => {
         .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
     );
   }
-});
-
-// 由頁面呼叫，令手機用系統通知顯示到站提醒，而不是只靠頁面內的 new Notification。
-self.addEventListener('message', e => {
-  const data = e.data || {};
-  if (data.type !== 'BUS_ARRIVAL') return;
-  const title = data.title || '巴士就嚟到站';
-  const options = {
-    body: data.body || '',
-    icon: './icon-192.png',
-    badge: './icon-192.png',
-    tag: data.tag || ('buspulse-arrival-' + Date.now()),
-    renotify: false,
-    vibrate: [260, 100, 260, 100, 260],
-    requireInteraction: true,
-    silent: false,
-    data: { url: './' }
-  };
-  e.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const existing = list.find(c => 'focus' in c);
-      if (existing) return existing.focus();
-      return clients.openWindow('./');
-    })
-  );
 });
