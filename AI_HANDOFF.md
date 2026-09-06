@@ -26,6 +26,7 @@
 - `fare-index.json`：由運輸署官方路線及收費 GeoJSON 整理出的精簡車資索引，約數千條 key-value，格式為 `COMPANY|ROUTE|ROUTE_SEQUENCE` 對應官方 `fullFare`。
 - `icon-192.png`、`icon-512.png`：PWA 圖示。
 - `README.md`：一般專案說明。
+- `CHANGELOG.md`：按日期記錄每次修正、測試、部署版本、已知限制及回退追查資料。
 
 ## API 資料來源
 
