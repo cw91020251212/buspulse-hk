@@ -833,6 +833,23 @@ async function requestNotifications() {
 async function roadPath(stops) {
   const valid = stops.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
   if (valid.length < 2) return valid.map(x => [x.lat, x.lng]);
+  const gapKm = (a,b) => Math.hypot((b.lat-a.lat)*111, (b.lng-a.lng)*102);
+  // Long gaps often make a multi-waypoint router choose an unrelated road/ferry.
+  // Route these links separately so mountain roads, tunnels and bridges stay in order.
+  if (valid.some((x,i) => i && gapKm(valid[i-1],x) > 5)) {
+    const segmented = [];
+    for (let i=1; i<valid.length; i++) {
+      const a=valid[i-1], b=valid[i];
+      try {
+        const q=await getJSON('https://router.project-osrm.org/route/v1/driving/' + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat + '?overview=full&geometries=geojson&steps=false', 12000);
+        const line=q.routes?.[0]?.geometry?.coordinates || [];
+        if (line.length > 1) { if (i > 1) line.shift(); segmented.push(...line.map(x => [x[1],x[0]])); continue; }
+      } catch {}
+      if (i > 1) segmented.pop();
+      segmented.push([a.lat,a.lng],[b.lat,b.lng]);
+    }
+    if (segmented.length > 1) return segmented;
+  }
   try {
     const coords = valid.map(x => x.lng + ',' + x.lat).join(';');
     const d = await getJSON('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson&steps=false', 15000);
