@@ -960,13 +960,15 @@ function toggleLiveRouteGPS(it, map, stops, button) {
     const lat=pos.coords.latitude, lng=pos.coords.longitude;
     if (!state.marker) state.marker=L.circleMarker([lat,lng], { radius:8, color:'#fff', weight:3, fillColor:'#ff625c', fillOpacity:.95 }).addTo(map);
     else state.marker.setLatLng([lat,lng]);
-    if (!state.centered) { map.setView([lat,lng], 17); state.centered=true; }
+    // 導航式跟隨：每次 GPS 更新都保持用家位置在畫面內，唔會只定位一次。
+    map.setView([lat,lng], Math.max(map.getZoom(), 15), { animate:false });
+    state.centered=true;
     const near=nearestStop(valid,lat,lng);
     const idx=near ? valid.findIndex(x => x.seq === near.seq) : -1;
     const next=idx >= 0 ? valid[idx+1] : null;
     const note=document.querySelector('[data-live-note="' + cssEscape(id) + '"]');
-    if (note) note.textContent = near ? ('你目前接近：第 ' + near.seq + ' 站「' + near.name + '」' + (next ? '｜下一站：第 ' + next.seq + ' 站「' + next.name + '」' : '｜已接近尾站')) : 'GPS 已開啟，正在尋找路線附近站頭…';
-    button.textContent='⌖ GPS 已開啟';
+    if (note) note.textContent = near ? ('你目前接近：第 ' + near.seq + ' 站「' + near.name + '」' + (next ? '｜下一站：第 ' + next.seq + ' 站「' + next.name + '」' : '｜已接近尾站') + '｜地圖跟住你') : 'GPS 已開啟，地圖會跟住你移動…';
+    button.textContent='⌖ GPS 跟住我';
   }, () => { button.textContent='⌖ GPS 失敗，請允許定位'; }, { enableHighAccuracy:true, maximumAge:10000, timeout:20000 });
   liveMapStates.set(id,state);
 }
