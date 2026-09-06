@@ -516,8 +516,9 @@ async function updateFares() {
     if (!el) return;
     const routeSeq = it.co === 'GMB' ? (+it.route_seq || 1) : (it.dir === 'I' ? 2 : 1);
     const route = String(it.route).toUpperCase().replace(/\s+/g, '');
-    // 運輸署索引把九巴及龍運分開：龍運（例如 E41）使用 LWB key。
-    const companies = it.co === 'KMB' ? ['KMB', 'LWB'] : [it.co];
+    // 運輸署索引會把龍運及聯營路線分開，例如 E41 用 LWB、102 用 KMB+CTB。
+    const companies = it.co === 'KMB' ? ['KMB', 'LWB', 'KMB+CTB', 'LWB+CTB']
+      : it.co === 'CTB' ? ['CTB', 'KMB+CTB', 'LWB+CTB'] : [it.co];
     const fare = companies.map(co => Number(fares[co + '|' + route + '|' + routeSeq]))
       .find(value => Number.isFinite(value));
     el.textContent = Number.isFinite(fare) ? '車資 $' + fare.toFixed(1) : '車資 —';
