@@ -60,6 +60,14 @@ Document Picture-in-Picture 小窗同樣取決於瀏覽器平台支援。小窗�
 
 ## 目前發布位置
 
+## 目前背景通知及測試工具狀態
+
+最新主分支提交為 `9915863`。近期版本加入了 Service Worker 系統通知、App badge、提示聲選項、延遲背景通知測試及相關交接紀錄；請先閱讀 `CHANGELOG.md` 內 2026-09-07 的連續背景通知修正記錄，再判斷是否需要繼續修改。設定頁現已將提示聲款式、提示聲長度、聲音來源、試聽提示聲、延遲背景測試及倒數狀態集中在可收合的「測試工具」區塊，保留原有 element IDs 及事件處理。
+
+版本回退測試曾由最新提交逐級向後進行；`dc4c7b7` 及更早版本已證實不符合目前背景提示需求，不應直接覆蓋最新主分支。若要繼續追查，應先建立保護分支，逐一記錄實機測試結果，再改動 `index.html` 或 `sw.js`。純 GitHub Pages 前端仍依賴瀏覽器背景執行；Service Worker 的 `showNotification()` 可改善系統通知，但不是伺服器 Push，也不能宣稱所有鎖屏／強制停止狀態必然可靠。
+
+## 目前發布位置
+
 - Repository：`https://github.com/cw91020251212/gang-baa-im-si-buspulse-hk`
 - GitHub Pages：`https://cw910202512.github.io/gang-baa-im-si-buspulse-hk/`
 
