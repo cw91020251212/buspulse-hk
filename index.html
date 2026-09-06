@@ -501,6 +501,22 @@ function importBackup(file) {
     } catch { alert('呢份檔案唔係有效嘅 BusPulse HK 備份。'); }
   }; reader.readAsText(file);
 }
+async function chooseBackupFile() {
+  try {
+    if (window.showOpenFilePicker) {
+      const [handle] = await window.showOpenFilePicker({
+        startIn: 'downloads',
+        multiple: false,
+        types: [{ description:'BusPulse HK 備份檔', accept:{ 'application/json':['.json'] } }]
+      });
+      importBackup(await handle.getFile());
+      return;
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+  }
+  $('#backupFile').click();
+}
 function backupReminder() {
   try { const last=localStorage.getItem('busboard.last-backup.v1'); if(!last) return '重要資料可能會因清除瀏覽器網站資料而消失，建議立即下載備份。'; const days=(Date.now()-new Date(last).getTime())/86400000; if(days>14) return '你上次備份已超過兩星期，建議重新下載一份最新備份。'; return '備份檔只會儲存喺你下載嘅位置，請唔好同瀏覽器網站資料一齊清除。'; } catch { return '建議定期下載備份檔，避免瀏覽器清除網站資料後遺失路線。'; }
 }
@@ -1095,7 +1111,7 @@ function viewHome() {
   $('#addBtn').addEventListener('click', viewSearch);
   $('#exportBtn').addEventListener('click', exportBackup);
   $('#shareBtn').addEventListener('click', shareBackup);
-  $('#importBtn').addEventListener('click', () => $('#backupFile').click());
+  $('#importBtn').addEventListener('click', chooseBackupFile);
   $('#backupFile').addEventListener('change', e => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; });
   $('#saveDefaultBtn').addEventListener('click', () => {
     if (!items.length) { alert('請先加入至少一條路線，先可以儲存為預設。'); return; }
