@@ -672,10 +672,16 @@ function shell() {
 
 function toggleAlarm(id, button) {
   alarms[id] = !alarms[id];
+  alarmSeen.delete(id);
   saveAlarms();
   button.classList.toggle('on', !!alarms[id]);
   button.textContent = '🔔';
-  if (alarms[id]) { unlockAudio(); button.title = '關閉到站提醒'; } else button.title = '開關到站提醒';
+  if (alarms[id]) {
+    unlockAudio();
+    button.title = '關閉到站提醒';
+    // 以按鈕點擊作為使用者手勢，直接申請系統通知權限。
+    requestNotifications();
+  } else button.title = '開關到站提醒';
 }
 let audioCtx = null;
 function unlockAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch {} }
@@ -694,7 +700,7 @@ function notifyArrival(it, min) {
   if (card) { card.classList.remove('alert-flash'); void card.offsetWidth; card.classList.add('alert-flash'); setTimeout(() => card.classList.remove('alert-flash'), 12000); }
   if ('Notification' in window && Notification.permission === 'granted') {
     navigator.serviceWorker?.ready.then(reg => {
-      reg.showNotification('巴士就嚟到站', {
+      const notification = {
         body,
         icon: './icon-192.png',
         badge: './icon-192.png',
@@ -703,7 +709,10 @@ function notifyArrival(it, min) {
         vibrate: [260,100,260,100,260],
         requireInteraction: true,
         data: { url: './' }
-      });
+      };
+      // 優先交由 Service Worker 顯示，手機切到背景時比頁面通知更可靠。
+      if (reg.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'巴士就嚟到站', ...notification });
+      else reg.showNotification('巴士就嚟到站', notification);
     }).catch(() => {
       try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) }); } catch {}
     });
