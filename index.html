@@ -466,13 +466,28 @@ function loadPrefs() { try { return Object.assign({ lead:2, time12:false, theme:
 function loadAlarms() { try { return JSON.parse(localStorage.getItem(ALARM_KEY) || '{}') || {}; } catch { return {}; } }
 function savePrefs() { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {} }
 function saveAlarms() { try { localStorage.setItem(ALARM_KEY, JSON.stringify(alarms)); } catch {} }
-function exportBackup() {
+function backupFile() {
   const payload = { format:'BusPulse HK backup', version:1, exportedAt:new Date().toISOString(), items, userDefaults, alarms, getoff, prefs };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='buspulse-hk-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  const now = new Date(), pad = n => String(n).padStart(2,'0');
+  const stamp = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+  const name = 'BusPulse-HK-backup-' + stamp + '.json';
+  return new File([JSON.stringify(payload, null, 2)], name, { type:'application/json' });
+}
+function markBackedUp(note) {
   try { localStorage.setItem('busboard.last-backup.v1', new Date().toISOString()); } catch {}
-  const n=document.querySelector('#backupNote'); if(n) n.textContent='已下載備份檔；建議儲存到雲端或另一部裝置。';
+  const n=document.querySelector('#backupNote'); if(n) n.textContent=note;
+}
+function exportBackup() {
+  const file=backupFile(), a=document.createElement('a'); a.href=URL.createObjectURL(file); a.download=file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  markBackedUp('已下載 ' + file.name + '；建議儲存到雲端或另一部裝置。');
+}
+async function shareBackup() {
+  const file=backupFile();
+  if (!navigator.share || !navigator.canShare || !navigator.canShare({ files:[file] })) {
+    exportBackup(); return;
+  }
+  try { await navigator.share({ title:'BusPulse HK 備份', text:'BusPulse HK 路線及設定備份', files:[file] }); markBackedUp('已開啟分享；你可以揀 WhatsApp、Gmail 或雲端硬碟儲存。'); } catch (e) { if (e.name !== 'AbortError') alert('分享失敗，已改為下載備份檔。'); }
 }
 function importBackup(file) {
   const reader=new FileReader(); reader.onload=() => {
@@ -1054,7 +1069,7 @@ function viewHome() {
   }
   h += '<button class="wide p" id="addBtn">＋ 加新路線</button>';
   h += '<div class="lbl">其他</div>';
-  h += '<div class="backup-box"><b>資料備份</b><br><span id="backupNote">' + backupReminder() + '</span><div class="backup-actions"><button class="wide" id="exportBtn">⬇ 下載備份</button><button class="wide" id="importBtn">⬆ 還原備份</button></div><input type="file" id="backupFile" accept="application/json,.json" style="display:none"></div>';
+  h += '<div class="backup-box"><b>資料備份</b><br><span id="backupNote">' + backupReminder() + '</span><div class="backup-actions"><button class="wide" id="exportBtn">⬇ 下載備份</button><button class="wide" id="shareBtn">↗ 分享備份</button></div><button class="wide" id="importBtn">⬆ 還原備份</button><input type="file" id="backupFile" accept="application/json,.json" style="display:none"></div>';
   h += '<button class="wide" id="installBtn" style="display:none">&#128241; 安裝到主畫面</button>';
   h += '<button class="wide" id="saveDefaultBtn">將目前路線儲存為預設</button>';
   h += '<button class="wide" id="loadDefaultBtn" ' + (userDefaults.length ? '' : 'disabled') + '>使用預設路線' + (userDefaults.length ? '（' + userDefaults.length + ' 條）' : '（尚未設定）') + '</button>';
@@ -1079,6 +1094,7 @@ function viewHome() {
   }));
   $('#addBtn').addEventListener('click', viewSearch);
   $('#exportBtn').addEventListener('click', exportBackup);
+  $('#shareBtn').addEventListener('click', shareBackup);
   $('#importBtn').addEventListener('click', () => $('#backupFile').click());
   $('#backupFile').addEventListener('change', e => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; });
   $('#saveDefaultBtn').addEventListener('click', () => {
