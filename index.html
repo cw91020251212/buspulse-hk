@@ -754,7 +754,19 @@ async function roadPath(stops) {
     const coords = valid.map(x => x.lng + ',' + x.lat).join(';');
     const d = await getJSON('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson&steps=false', 15000);
     const line = d.routes?.[0]?.geometry?.coordinates || [];
-    if (line.length > 1) return line.map(x => [x[1], x[0]]);
+    if (line.length > 1) {
+      const lats = valid.map(x => x.lat), lngs = valid.map(x => x.lng);
+      const minLat = Math.min(...lats) - .03, maxLat = Math.max(...lats) + .03;
+      const minLng = Math.min(...lngs) - .03, maxLng = Math.max(...lngs) + .03;
+      const outside = line.some(x => x[1] < minLat || x[1] > maxLat || x[0] < minLng || x[0] > maxLng);
+      const directKm = valid.slice(1).reduce((sum, x, i) => {
+        const a = valid[i], dy = (x.lat-a.lat)*111, dx = (x.lng-a.lng)*102;
+        return sum + Math.hypot(dx, dy);
+      }, 0);
+      const routeKm = Number(d.routes?.[0]?.distance || 0) / 1000;
+      // Reject implausible detours (e.g. E41 being routed towards Zhuhai/Macau).
+      if (!outside && (!routeKm || routeKm <= Math.max(80, directKm * 3.2))) return line.map(x => [x[1], x[0]]);
+    }
   } catch {}
   return valid.map(x => [x.lat, x.lng]);
 }
