@@ -465,7 +465,7 @@ function saveGetoff() { try { localStorage.setItem(GETOFF_KEY, JSON.stringify(ge
 let prefs = loadPrefs();
 let alarms = loadAlarms();
 const alarmSeen = new Map();
-function loadPrefs() { try { return Object.assign({ lead:2, time12:false, theme:'dark', font:'normal', sound:'triple', soundLen:'long' }, JSON.parse(localStorage.getItem(PREF_KEY) || '{}')); } catch { return { lead:2, time12:false, theme:'dark', font:'normal', sound:'triple', soundLen:'long' }; } }
+function loadPrefs() { try { return Object.assign({ lead:2, time12:false, theme:'dark', font:'normal', sound:'triple', soundLen:'long', webSound:true, systemSilent:false }, JSON.parse(localStorage.getItem(PREF_KEY) || '{}')); } catch { return { lead:2, time12:false, theme:'dark', font:'normal', sound:'triple', soundLen:'long', webSound:true, systemSilent:false }; } }
 function loadAlarms() { try { return JSON.parse(localStorage.getItem(ALARM_KEY) || '{}') || {}; } catch { return {}; } }
 function savePrefs() { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {} }
 function saveAlarms() { try { localStorage.setItem(ALARM_KEY, JSON.stringify(alarms)); } catch {} }
@@ -689,6 +689,7 @@ function toggleAlarm(id, button) {
 let audioCtx = null;
 function unlockAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch {} }
 function ringBell() {
+  if (prefs.webSound === false) return;
   try {
     unlockAudio();
     const now = audioCtx.currentTime;
@@ -715,7 +716,8 @@ function notifyArrival(it, min) {
         badge: './icon-192.png',
         tag: 'buspulse-' + uid(it),
         renotify: true,
-        vibrate: [260,100,260,100,260],
+        vibrate: prefs.systemSilent ? [] : [260,100,260,100,260],
+        silent: !!prefs.systemSilent,
         requireInteraction: true,
         data: { url: './' }
       };
@@ -871,10 +873,10 @@ async function sendTestNotification() {
     const body = '呢個係測試提示，代表背景到站通知通道可以運作。';
     if (reg?.active) {
       navigator.setAppBadge?.(1).catch?.(() => {});
-      reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時提示', body, badgeNumber:1, tag:'buspulse-test', requireInteraction:true });
+      reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時提示', body, badgeNumber:1, silent:!!prefs.systemSilent, tag:'buspulse-test', requireInteraction:true });
     } else {
       navigator.setAppBadge?.(1).catch?.(() => {});
-      await reg?.showNotification('【測試】港巴即時提示', { body, icon:'./icon-192.png', tag:'buspulse-test', requireInteraction:true });
+      await reg?.showNotification('【測試】港巴即時提示', { body, icon:'./icon-192.png', silent:!!prefs.systemSilent, vibrate:prefs.systemSilent?[]:[260,100,260], tag:'buspulse-test', requireInteraction:true });
     }
     return true;
   } catch { alert('測試通知未能發出，請重新載入網站後再試'); return false; }
@@ -916,8 +918,8 @@ async function scheduleTestNotification(delayMs) {
     ringBell();
     const reg = await navigator.serviceWorker?.ready;
     const body = '延遲背景測試完成；如果你而家先收到，代表背景通知通道有反應。';
-    if (reg?.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時背景提示', body, badgeNumber:1, tag:'buspulse-delayed-test', requireInteraction:true });
-    else await reg?.showNotification('【測試】港巴即時背景提示', { body, icon:'./icon-192.png', tag:'buspulse-delayed-test', requireInteraction:true });
+    if (reg?.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時背景提示', body, badgeNumber:1, silent:!!prefs.systemSilent, tag:'buspulse-delayed-test', requireInteraction:true });
+    else await reg?.showNotification('【測試】港巴即時背景提示', { body, icon:'./icon-192.png', silent:!!prefs.systemSilent, vibrate:prefs.systemSilent?[]:[260,100,260], tag:'buspulse-delayed-test', requireInteraction:true });
     testNotifyEndsAt = 0;
     if (status) status.textContent = '背景測試已發出；如果冇收到，請檢查通知權限及省電設定。';
     if (button) { button.disabled = false; button.textContent = '安排背景測試'; }
@@ -1166,6 +1168,7 @@ function viewPrefs() {
     '<div class="pref-row"><div>提早幾多分鐘響鬧<small>揀咗路線卡上方嘅 🔔 後生效；卡片所選站頭就係提醒目標站</small></div><select class="pref-select" id="leadSel"><option value="1">1 分鐘</option><option value="2">2 分鐘</option><option value="3">3 分鐘</option><option value="5">5 分鐘</option></select></div>' +
     '<div class="pref-row"><div>提示聲款式<small>可以揀兩下、三下，或者鬧鐘式連續聲</small></div><select class="pref-select" id="soundSel"><option value="double">兩下叮噹</option><option value="triple">三下提示</option><option value="alarm">鬧鐘長響</option></select></div>' +
     '<div class="pref-row"><div>提示聲長度<small>只影響網站前景播放嘅聲效；背景系統聲由手機控制</small></div><select class="pref-select" id="soundLenSel"><option value="short">較短</option><option value="normal">標準</option><option value="long">較長</option></select></div>' +
+    '<div class="pref-row"><div>聲音來源<small>可以只用手機系統通知聲，或者同時播放網站自訂聲效</small></div><select class="pref-select" id="webSoundSel"><option value="true">網站聲效＋系統聲</option><option value="false">只用系統通知聲</option></select></div>' +
     '<button class="wide" id="previewSoundBtn">🔔 試聽目前提示聲</button>' +
     '<button class="wide" id="notifyBtn">允許系統通知</button>' +
     '<div class="pref-row"><div>延遲背景測試<small>撳安排後，立即將網站切到背景或鎖屏，時間到先會發通知</small></div><select class="pref-select" id="testDelaySel"><option value="15000">15 秒後</option><option value="60000">1 分鐘後</option></select></div>' +
@@ -1176,11 +1179,12 @@ function viewPrefs() {
     '<div class="pref-row"><div>時間顯示<small>ETA 卡片時間及頂部時鐘</small></div><select class="pref-select" id="timeSel"><option value="false">24 小時制</option><option value="true">12 小時制</option></select></div>' +
     '<div class="pref-row"><div>顏色模式<small>可以選擇黑暗或光明版</small></div><select class="pref-select" id="themeSel"><option value="dark">黑暗模式</option><option value="light">光明模式</option></select></div>' +
     '<button class="wide" id="prefsBack">← 返回路線設定</button>';
-  $('#leadSel').value = String(prefs.lead); $('#soundSel').value = prefs.sound; $('#soundLenSel').value = prefs.soundLen; $('#fontSel').value = prefs.font; $('#timeSel').value = String(prefs.time12); $('#themeSel').value = prefs.theme;
+  $('#leadSel').value = String(prefs.lead); $('#soundSel').value = prefs.sound; $('#soundLenSel').value = prefs.soundLen; $('#webSoundSel').value = String(prefs.webSound !== false); $('#fontSel').value = prefs.font; $('#timeSel').value = String(prefs.time12); $('#themeSel').value = prefs.theme;
   updateNotificationButton();
   $('#leadSel').addEventListener('change', e => { prefs.lead=+e.target.value; savePrefs(); });
   $('#soundSel').addEventListener('change', e => { prefs.sound=e.target.value; savePrefs(); });
   $('#soundLenSel').addEventListener('change', e => { prefs.soundLen=e.target.value; savePrefs(); });
+  $('#webSoundSel').addEventListener('change', e => { prefs.webSound=e.target.value === 'true'; savePrefs(); });
   $('#previewSoundBtn').addEventListener('click', () => { unlockAudio(); ringBell(); });
   $('#fontSel').addEventListener('change', e => { prefs.font=e.target.value; savePrefs(); applyPrefs(); });
   $('#timeSel').addEventListener('change', e => { prefs.time12=e.target.value === 'true'; savePrefs(); });
