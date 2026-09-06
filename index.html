@@ -71,7 +71,7 @@ body{
   padding:0 13px 9px 15px; font-size:11.5px; color:var(--faint);
   display:flex; align-items:center; gap:5px;
 }
-.stop b{color:var(--dim); font-weight:600}.fare{margin-left:auto;color:#ffd166;font-size:10.5px;font-weight:800;white-space:nowrap;background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.2);padding:3px 6px;border-radius:6px}.fare-link{color:#a9c7ff;text-decoration:none;border-color:rgba(169,199,255,.35);cursor:pointer}.fare-link:hover{text-decoration:underline}
+.stop b{color:var(--dim); font-weight:600}.stop-edit{flex:1;min-width:0;border:0;background:none;color:var(--faint);padding:0;text-align:left;font:inherit;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stop-edit:hover b{text-decoration:underline;color:var(--text)}.fare{margin-left:auto;color:#ffd166;font-size:10.5px;font-weight:800;white-space:nowrap;background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.2);padding:3px 6px;border-radius:6px}.fare-link{color:#a9c7ff;text-decoration:none;border-color:rgba(169,199,255,.35);cursor:pointer}.fare-link:hover{text-decoration:underline}
 /* ---------- eta row ---------- */
 .etas{display:flex; gap:7px; padding:0 13px 12px 15px; overflow-x:auto; scrollbar-width:none}
 .etas::-webkit-scrollbar{display:none}
@@ -628,7 +628,7 @@ function shell() {
       '<button class="alarm-btn ' + (alarms[uid(it)] ? 'on' : '') + '" data-alarm-id="' + id + '" title="開關到站提醒" aria-label="開關到站提醒">🔔</button>' +
       '<button class="map-head-btn" data-map-id="' + id + '" title="查看路線地圖" aria-label="查看路線地圖">⌖</button>' +
       '</div>' +
-      '<div class="stop">&#128205; <b>' + esc(it.stopName || '') + '</b><a class="fare" data-fare="' + id + '" title="官方全程車資">全程車資：讀取中</a></div>' +
+      '<div class="stop"><button class="stop-edit" data-edit-stop="' + id + '" title="更改上車站">&#128205; <b>' + esc(it.stopName || '') + '</b></button><a class="fare" data-fare="' + id + '" title="官方全程車資">全程車資：讀取中</a></div>' +
       '<div class="etas" data-slot="' + id + '">' +
         '<div class="eta"><div class="m pulse">··</div><div class="u">載入中</div></div>' +
       '</div>' +
@@ -639,6 +639,10 @@ function shell() {
     const id = button.dataset.getoffId;
     const item = items.find(x => uid(x) === id);
     if (item) button.addEventListener('click', () => openGetoffSetup(item));
+  });
+  board.querySelectorAll('[data-edit-stop]').forEach(button => {
+    const item = items.find(x => uid(x) === button.dataset.editStop);
+    if (item) button.addEventListener('click', () => editBoardStop(item));
   });
   board.querySelectorAll('[data-alarm-id]').forEach(button => {
     const id = button.dataset.alarmId;
@@ -1195,8 +1199,11 @@ async function doSearch(q) {
 }
 
 /* ---------- view 3: pick stop ---------- */
+function editBoardStop(it) {
+  viewStops({...it, editId:uid(it), dirLabel:'目前路線：往 ' + (it.dest || '')});
+}
 async function viewStops(v) {
-  sTitle.textContent = v.route + ' — 揀站頭';
+  sTitle.textContent = v.route + (v.editId ? ' — 更改上車站' : ' — 揀站頭');
   sBody.innerHTML = '<div class="msg"><span class="spin"></span>載入站頭 …</div>';
   sBody.scrollTop = 0;
   let stops;
@@ -1213,7 +1220,7 @@ async function viewStops(v) {
     '<div class="lbl">' + esc(v.dirLabel) + '</div>' +
     '<div class="map-actions" style="padding:0 0 10px"><button class="map-toggle" id="setupMapBtn"><span>🗺 先睇全條路線地圖</span><span class="map-arrow">⌄</span></button></div>' +
     '<div class="map-wrap" id="setupMapWrap"><div class="map-tools"><button class="locate-btn" id="locateBtn">⌖ 定位我附近</button></div><div class="route-map"></div><div class="map-note">藍線按道路網絡模擬，撳任何站點可以睇站名。</div></div>' +
-    '<div class="hint" style="margin:0 0 10px">睇完地圖後，揀你上車嗰個站（' + stops.length + ' 個）</div>' +
+    '<div class="hint" style="margin:0 0 10px">' + (v.editId ? '揀新上車站，會直接更新原有路線卡，不會新增路線。' : '睇完地圖後，揀你上車嗰個站') + '（' + stops.length + ' 個）</div>' +
     '<div class="list">' + stops.map((s, i) =>
       '<button class="li sm" data-s="' + i + '">' +
         '<span class="n">' + s.seq + '</span>' +
@@ -1222,12 +1229,24 @@ async function viewStops(v) {
       '</button>').join('') + '</div>' +
     '<button class="wide" id="bk">← 返回</button>';
   $('#setupMapBtn').addEventListener('click', () => showSetupMap(v, stops, $('#setupMapBtn')));
-  $('#bk').addEventListener('click', viewSearch);
+  $('#bk').addEventListener('click', v.editId ? viewHome : viewSearch);
   sBody.querySelectorAll('[data-s]').forEach(b =>
     b.addEventListener('click', () => addItem(v, stops[+b.dataset.s])));
 }
 
 function addItem(v, s) {
+  if (v.editId) {
+    const index = items.findIndex(x => uid(x) === v.editId);
+    if (index < 0) { viewHome(); return; }
+    const oldId = uid(items[index]);
+    const next = {...items[index], seq:s.seq, stopId:s.id, stopName:s.name};
+    const newId = uid(next);
+    if (oldId !== newId) {
+      if (alarms[oldId] != null) { alarms[newId] = alarms[oldId]; delete alarms[oldId]; }
+      if (getoff[oldId] != null) { getoff[newId] = getoff[oldId]; delete getoff[oldId]; }
+    }
+    items[index] = next; save(); saveAlarms(); saveGetoff(); shell(); refresh(); viewHome(); return;
+  }
   const it = v.co === 'GMB'
     ? { co:'GMB', route:v.route, region:v.region, route_id:v.route_id,
         route_seq:v.route_seq, seq:s.seq, stopId:s.id, stopName:s.name, dest:v.dest }
