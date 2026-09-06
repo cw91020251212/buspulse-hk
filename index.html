@@ -895,6 +895,8 @@ async function scheduleTestNotification(delayMs) {
   if (!('Notification' in window)) { alert('此瀏覽器不支援系統通知'); return; }
   await requestNotifications();
   if (Notification.permission !== 'granted') { alert('未允許系統通知，請先在瀏覽器設定開啟'); return; }
+  // 由安排按鈕的使用者手勢解鎖音效，時間到時先播放所選聲效，再發系統通知。
+  unlockAudio();
   cancelTestNotification();
   testNotifyEndsAt = Date.now() + delayMs;
   const button = $('#testNotifyBtn');
@@ -911,6 +913,7 @@ async function scheduleTestNotification(delayMs) {
   updateCountdown();
   testNotifyTimer = setTimeout(async () => {
     testNotifyTimer = null;
+    ringBell();
     const reg = await navigator.serviceWorker?.ready;
     const body = '延遲背景測試完成；如果你而家先收到，代表背景通知通道有反應。';
     if (reg?.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時背景提示', body, badgeNumber:1, tag:'buspulse-delayed-test', requireInteraction:true });
@@ -1168,8 +1171,6 @@ function viewPrefs() {
     '<div class="pref-row"><div>延遲背景測試<small>撳安排後，立即將網站切到背景或鎖屏，時間到先會發通知</small></div><select class="pref-select" id="testDelaySel"><option value="15000">15 秒後</option><option value="60000">1 分鐘後</option></select></div>' +
     '<div class="test-notify-row"><button class="wide" id="testNotifyBtn">安排背景測試</button><span class="test-countdown ready" id="testCountdown">待機</span></div>' +
     '<div class="hint" id="testNotifyStatus">未安排測試；撳掣後請立即將網站放到背景。</div>' +
-    '<button class="wide" id="miniBtn">▣ 開啟最上層小窗</button>' +
-    '<div class="hint">小窗會顯示簡化 ETA，讓你可以一邊聽音樂一邊睇巴士；手機瀏覽器若不支援，請使用 Android 分割畫面。</div>' +
     '<div class="lbl">外觀</div>' +
     '<div class="pref-row"><div>字體大小<small>只影響主畫面閱讀大小</small></div><select class="pref-select" id="fontSel"><option value="normal">標準</option><option value="large">較大</option></select></div>' +
     '<div class="pref-row"><div>時間顯示<small>ETA 卡片時間及頂部時鐘</small></div><select class="pref-select" id="timeSel"><option value="false">24 小時制</option><option value="true">12 小時制</option></select></div>' +
@@ -1186,7 +1187,6 @@ function viewPrefs() {
   $('#themeSel').addEventListener('change', e => { prefs.theme=e.target.value; savePrefs(); applyPrefs(); });
   $('#notifyBtn').addEventListener('click', async () => { await requestNotifications(); updateNotificationButton(); });
   $('#testNotifyBtn').addEventListener('click', () => scheduleTestNotification(Number($('#testDelaySel').value)));
-  $('#miniBtn').addEventListener('click', e => openMiniWindow(e.currentTarget));
   $('#prefsBack').addEventListener('click', viewHome);
 }
 
