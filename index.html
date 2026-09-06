@@ -707,6 +707,7 @@ function notifyArrival(it, min) {
   const card = board.querySelector('[data-id="' + cssEscape(uid(it)) + '"]');
   if (card) { card.classList.remove('alert-flash'); void card.offsetWidth; card.classList.add('alert-flash'); setTimeout(() => card.classList.remove('alert-flash'), 12000); }
   if ('Notification' in window && Notification.permission === 'granted') {
+    navigator.setAppBadge?.(1).catch?.(() => {});
     navigator.serviceWorker?.ready.then(reg => {
       const notification = {
         body,
@@ -719,7 +720,7 @@ function notifyArrival(it, min) {
         data: { url: './' }
       };
       // 優先交由 Service Worker 顯示，手機切到背景時比頁面通知更可靠。
-      if (reg.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'巴士就嚟到站', ...notification });
+      if (reg.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'巴士就嚟到站', badgeNumber:1, ...notification });
       else reg.showNotification('巴士就嚟到站', notification);
     }).catch(() => {
       try { new Notification('巴士就嚟到站', { body, tag: 'buspulse-' + uid(it) }); } catch {}
@@ -869,9 +870,11 @@ async function sendTestNotification() {
     const reg = await navigator.serviceWorker?.ready;
     const body = '呢個係測試提示，代表背景到站通知通道可以運作。';
     if (reg?.active) {
-      reg.active.postMessage({ type:'BUS_ARRIVAL', title:'港巴即時測試提示', body, tag:'buspulse-test', requireInteraction:true });
+      navigator.setAppBadge?.(1).catch?.(() => {});
+      reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時提示', body, badgeNumber:1, tag:'buspulse-test', requireInteraction:true });
     } else {
-      await reg?.showNotification('港巴即時測試提示', { body, icon:'./icon-192.png', tag:'buspulse-test', requireInteraction:true });
+      navigator.setAppBadge?.(1).catch?.(() => {});
+      await reg?.showNotification('【測試】港巴即時提示', { body, icon:'./icon-192.png', tag:'buspulse-test', requireInteraction:true });
     }
     return true;
   } catch { alert('測試通知未能發出，請重新載入網站後再試'); return false; }
@@ -910,8 +913,8 @@ async function scheduleTestNotification(delayMs) {
     testNotifyTimer = null;
     const reg = await navigator.serviceWorker?.ready;
     const body = '延遲背景測試完成；如果你而家先收到，代表背景通知通道有反應。';
-    if (reg?.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'港巴即時背景測試', body, tag:'buspulse-delayed-test', requireInteraction:true });
-    else await reg?.showNotification('港巴即時背景測試', { body, icon:'./icon-192.png', tag:'buspulse-delayed-test', requireInteraction:true });
+    if (reg?.active) reg.active.postMessage({ type:'BUS_ARRIVAL', title:'【測試】港巴即時背景提示', body, badgeNumber:1, tag:'buspulse-delayed-test', requireInteraction:true });
+    else await reg?.showNotification('【測試】港巴即時背景提示', { body, icon:'./icon-192.png', tag:'buspulse-delayed-test', requireInteraction:true });
     testNotifyEndsAt = 0;
     if (status) status.textContent = '背景測試已發出；如果冇收到，請檢查通知權限及省電設定。';
     if (button) { button.disabled = false; button.textContent = '安排背景測試'; }

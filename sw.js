@@ -1,6 +1,6 @@
 /* BusPulse HK — service worker
    只 cache app shell；到站數據永遠走網絡，絕不 cache。 */
-const SHELL = 'buspulse-hk-shell-v10';
+const SHELL = 'buspulse-hk-shell-v11';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -54,13 +54,17 @@ self.addEventListener('message', e => {
     requireInteraction: true,
     data: { url: './' }
   };
-  e.waitUntil(self.registration.showNotification(title, options));
+  const badge = self.registration.setAppBadge
+    ? self.registration.setAppBadge(Math.max(1, Number(data.badgeNumber) || 1)).catch(() => {})
+    : Promise.resolve();
+  e.waitUntil(Promise.all([self.registration.showNotification(title, options), badge]));
 });
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const clearBadge = self.registration.clearAppBadge ? self.registration.clearAppBadge().catch(() => {}) : Promise.resolve();
   e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    Promise.all([clearBadge, clients.matchAll({ type: 'window', includeUncontrolled: true })]).then(([, list]) => {
       const existing = list.find(c => 'focus' in c);
       if (existing) return existing.focus();
       return clients.openWindow('./');
